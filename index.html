@@ -706,6 +706,7 @@
           <select class="select-filter" id="el-month" onchange="renderElectric()"></select>
           <select class="select-filter" id="el-year" onchange="renderElectric()"></select>
           <button class="btn btn-ghost" id="btn-tariff-settings" onclick="openTariffModal()" style="display:none" title="Налаштування тарифів">⚙️ Тарифи</button>
+          <button class="btn btn-ghost" id="btn-new-meter-el" onclick="openMeterModal(null,'electric')" style="display:none">+ Лічильник</button>
           <button class="btn btn-accent" id="btn-add-reading-el" onclick="openAddReadingModal('electric')" style="display:none">+ Додати показання</button>
           <button class="btn btn-success" id="btn-export-el" onclick="exportElectricExcel()" style="display:none" title="Завантажити Excel">📥 Excel</button>
         </div>
@@ -723,6 +724,7 @@
         <div style="display:flex;gap:8px;align-items:center">
           <select class="select-filter" id="wt-month" onchange="renderWater()"></select>
           <select class="select-filter" id="wt-year" onchange="renderWater()"></select>
+          <button class="btn btn-ghost" id="btn-new-meter-wt" onclick="openMeterModal(null,'water')" style="display:none">+ Лічильник</button>
           <button class="btn btn-accent" id="btn-add-reading-wt" onclick="openAddReadingModal('water')" style="display:none">+ Додати показання</button>
           <button class="btn btn-success" id="btn-export-wt" onclick="exportWaterExcel()" style="display:none" title="Завантажити Excel">📥 Excel</button>
         </div>
@@ -1206,6 +1208,7 @@ function renderElectric(){
   const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
   if(can('add_reading')) document.getElementById('btn-add-reading-el').style.display='inline-flex';
   if(can('edit_tariff')){ document.getElementById('btn-export-el').style.display='inline-flex'; document.getElementById('btn-tariff-settings').style.display='inline-flex'; }
+  if(can('meters')) document.getElementById('btn-new-meter-el').style.display='inline-flex';
 
   const LOSS_RATE = TARIFFS.loss;
 
@@ -1312,6 +1315,7 @@ function renderWater(){
   const wtMeters = METERS.filter(x=>x.type==='water'&&x.status!=='inactive');
   if(can('add_reading')) document.getElementById('btn-add-reading-wt').style.display='inline-flex';
   if(can('edit_tariff')) document.getElementById('btn-export-wt').style.display='inline-flex';
+  if(can('meters')) document.getElementById('btn-new-meter-wt').style.display='inline-flex';
 
   let totalDiff=0;
   const rows = wtMeters.map(meter=>{
@@ -1905,32 +1909,41 @@ function saveUser(id){
   buildSidebar(); buildUserTiles();
 }
 
-function openMeterModal(id){
+function openMeterModal(id, defaultType){
   const meter=id?METERS.find(m=>m.id===id):null;
   const st=meter?.status||'active';
-  document.getElementById('modal-title').textContent=meter?'Редагувати лічильник':'Новий лічильник';
+  const type=meter?.type||(defaultType||'electric');
+  document.getElementById('modal-title').textContent=meter?'Редагувати лічильник':'➕ Новий лічильник';
   document.getElementById('modal-body').innerHTML=`
     <div class="modal-grid">
-      <div><label class="form-label">Номер лічильника</label><input class="form-input" id="m-number" value="${meter?.number||''}" placeholder="ЕЛ-001"></div>
+      <div><label class="form-label">Номер лічильника</label><input class="form-input" id="m-number" value="${meter?.number||''}" placeholder="${type==='water'?'ВД-001':'ЕЛ-001'}" autofocus></div>
       <div><label class="form-label">Серійний номер</label><input class="form-input" id="m-serial" value="${meter?.serial||''}" placeholder="SN000"></div>
-      <div style="grid-column:1/-1"><label class="form-label">Приміщення</label><input class="form-input" id="m-room" value="${meter?.room||''}" placeholder="Назва приміщення / Корпус"></div>
-      <div><label class="form-label">Тип</label><select class="form-select" id="m-type"><option value="electric"${!meter||meter.type==='electric'?' selected':''}>⚡ Електроенергія</option><option value="water"${meter?.type==='water'?' selected':''}>💧 Холодна вода</option></select></div>
+      <div style="grid-column:1/-1"><label class="form-label">Назва приміщення</label><input class="form-input" id="m-room" value="${meter?.room||''}" placeholder="Приміщення / Корпус А"></div>
+      <div><label class="form-label">Тип лічильника</label>
+        <select class="form-select" id="m-type">
+          <option value="electric"${type==='electric'?' selected':''}>⚡ Електроенергія</option>
+          <option value="water"${type==='water'?' selected':''}>💧 Холодна вода</option>
+        </select>
+      </div>
       <div>
         <label class="form-label">Статус</label>
         <div class="status-toggle" id="m-status-toggle">
-          <button class="status-btn active-status ${st==='active'?'active-status':''}" id="st-active"
-            onclick="setMeterStatus('active')" style="${st==='active'?'background:var(--green-bg);color:var(--green)':''}">✅ Активний</button>
-          <button class="status-btn reserve-status" id="st-reserve"
-            onclick="setMeterStatus('reserve')" style="${st==='reserve'?'background:var(--yellow-bg);color:var(--yellow)':''}">⏸ Резерв</button>
-          <button class="status-btn inactive-status" id="st-inactive"
-            onclick="setMeterStatus('inactive')" style="${st==='inactive'?'background:var(--red-bg);color:var(--red)':''}">🔴 Неактивний</button>
+          <button class="status-btn" id="st-active" onclick="setMeterStatus('active')" style="${st==='active'?'background:var(--green-bg);color:var(--green)':''}">✅ Активний</button>
+          <button class="status-btn" id="st-reserve" onclick="setMeterStatus('reserve')" style="${st==='reserve'?'background:var(--yellow-bg);color:var(--yellow)':''}">⏸ Резерв</button>
+          <button class="status-btn" id="st-inactive" onclick="setMeterStatus('inactive')" style="${st==='inactive'?'background:var(--red-bg);color:var(--red)':''}">🔴 Неактивний</button>
         </div>
         <input type="hidden" id="m-status" value="${st}">
       </div>
+      ${!meter ? `
+      <div style="grid-column:1/-1">
+        <label class="form-label">Початкове показання (необов'язково)</label>
+        <input class="form-input" type="number" id="m-initial" placeholder="0" min="0">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Якщо введете — буде записано як показання за поточний місяць</div>
+      </div>` : ''}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>
-      <button class="btn btn-accent" onclick="saveMeter(${id||'null'})">💾 Зберегти</button>
+      <button class="btn btn-accent" onclick="saveMeter(${id||'null'}, '${defaultType||''}')">💾 Зберегти</button>
     </div>`;
   showModal();
 }
@@ -1942,28 +1955,57 @@ function setMeterStatus(val){
     const btn=document.getElementById('st-'+s);
     if(s===val){
       const [bg,fg]=colors[s].split('/');
-      btn.style.background=`${bg}`; btn.style.color=`${fg}`;
+      btn.style.background=bg; btn.style.color=fg;
     } else {
       btn.style.background=''; btn.style.color='';
     }
   });
 }
 
-function saveMeter(id){
+function saveMeter(id, returnPage){
   const number=document.getElementById('m-number').value.trim();
   const serial=document.getElementById('m-serial').value.trim();
   const room=document.getElementById('m-room').value.trim();
   const type=document.getElementById('m-type').value;
   const status=document.getElementById('m-status').value;
-  if(!number||!room){ showNotif("Заповніть всі поля",'error'); return; }
+  if(!number||!room){ showNotif("Заповніть номер та приміщення",'error'); return; }
+  // Check for duplicate number
+  const exists = METERS.find(m=>m.number===number && m.id!==(id||null));
+  if(exists){ showNotif(`Лічильник "${number}" вже існує`,'error'); return; }
+
+  let newMeterId = null;
   if(id){
     const m=METERS.find(x=>x.id===id);
     if(m){ m.number=number; m.serial=serial; m.room=room; m.type=type; m.status=status; }
   } else {
-    METERS.push({ id:Math.max(...METERS.map(m=>m.id))+1, number, serial, type, room, status });
+    newMeterId = Math.max(...METERS.map(m=>m.id))+1;
+    METERS.push({ id:newMeterId, number, serial, type, room, status });
+    // Save initial reading if provided
+    const initEl = document.getElementById('m-initial');
+    const initVal = initEl ? parseFloat(initEl.value) : NaN;
+    if(!isNaN(initVal) && initVal>=0){
+      const now2 = new Date();
+      READINGS.push({ id:ridCounter++, meterId:newMeterId, month:now2.getMonth()+1, year:now2.getFullYear(), current:initVal, previous:0, note:'Початкове показання', enteredBy:currentUser.id, enteredAt:now2.toISOString().split('T')[0] });
+    }
   }
-  closeModal(); renderMeters();
-  showNotif(id?'Лічильник оновлено':'Лічильник додано','success');
+
+  closeModal();
+  showNotif(id?`Лічильник "${number}" оновлено`:`Лічильник "${number}" додано ✓`,'success');
+
+  // Refresh correct page
+  const activePage = document.querySelector('.page.active')?.id;
+  if(activePage==='page-electric'||returnPage==='electric') renderElectric();
+  else if(activePage==='page-water'||returnPage==='water') renderWater();
+  else if(activePage==='page-meters') renderMeters();
+
+  // If new meter added — immediately offer to enter reading
+  if(newMeterId && (returnPage==='electric'||returnPage==='water')){
+    setTimeout(()=>{
+      if(confirm(`Лічильник "${number}" додано! Ввести показання зараз?`)){
+        openAddReadingModal(returnPage, newMeterId);
+      }
+    }, 400);
+  }
 }
 
 // ===== MODAL HELPERS =====
