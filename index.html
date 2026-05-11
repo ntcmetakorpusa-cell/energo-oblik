@@ -245,8 +245,15 @@
   /* ===== TABLE ===== */
   .table-wrapper {
     background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg);
-    overflow:hidden;
+    overflow-x:auto; /* горизонтальний скрол */
   }
+  .table-wrapper table { min-width:max-content; } /* таблиця не стискається */
+  /* Кнопки "Дії" завжди видимі праворуч */
+  tbody td:last-child, thead th:last-child {
+    position:sticky; right:0; background:var(--bg2); z-index:1;
+    box-shadow:-3px 0 8px rgba(0,0,0,.15);
+  }
+  tbody tr:hover td:last-child { background:var(--bg3); }
   .table-header {
     padding:16px 20px; border-bottom:1px solid var(--border);
     display:flex; align-items:center; justify-content:space-between;
@@ -1174,11 +1181,13 @@ function renderElectric(){
   if(can('add_reading')) document.getElementById('btn-add-reading-el').style.display='inline-flex';
   if(can('edit_tariff')) document.getElementById('btn-export-el').style.display='inline-flex';
 
-  const cols = can('edit_tariff')
-    ? `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, кВт</th><th>Тариф, грн</th><th>Вартість, грн</th><th>ПДВ 20%</th><th>Всього, грн</th><th>Зведення</th><th>Дії</th>`
-    : `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, кВт</th><th>Зведення</th><th>Дії</th>`;
+  const LOSS_RATE = 0.13; // Втрати 13%
 
-  let totalDiff=0, totalCost=0;
+  const cols = can('edit_tariff')
+    ? `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, кВт</th><th>Втрати 13%, кВт</th><th>Тариф, грн</th><th>Вартість, грн</th><th>ПДВ 20%</th><th>Всього, грн</th><th>Зведення</th><th>Дії</th>`
+    : `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, кВт</th><th>Втрати 13%</th><th>Зведення</th><th>Дії</th>`;
+
+  let totalDiff=0, totalCost=0, totalLoss=0;
 
   const rows = elMeters.map(meter=>{
     const r=getReading(meter.id,m,y);
@@ -1186,18 +1195,22 @@ function renderElectric(){
     const prev=r?.previous||(p?.current||0);
     const diff=r?(r.current-prev):null;
     if(diff!==null) totalDiff+=diff;
-    const cost=diff!==null?diff*TARIFFS.electric:0;
+    const loss=diff!==null?+(diff*LOSS_RATE).toFixed(2):0;
+    if(diff!==null) totalLoss+=loss;
+    const diffWithLoss=diff!==null?diff+loss:0;
+    const cost=diff!==null?diffWithLoss*TARIFFS.electric:0;
     const vat=cost*TARIFFS.vat;
     const total=cost+vat;
     if(diff!==null) totalCost+=total;
 
     const diffCell = diff!==null?`<span class="diff-pos">+${diff}</span>`:`<span style="color:var(--text3)">—</span>`;
+    const lossCell = diff!==null?`<span style="color:var(--yellow);font-family:'JetBrains Mono',monospace;font-size:12px">+${loss}</span>`:`<span style="color:var(--text3)">—</span>`;
     const meterStatusChip = meter.status==='reserve'?` <span class="badge badge-yellow" style="font-size:10px">⏸резерв</span>`:meter.status==='inactive'?` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>`:'';
     const status = r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
 
     const finCols = can('edit_tariff')
-      ? `<td class="td-num">${TARIFFS.electric.toFixed(2)}</td><td class="td-num">${cost.toFixed(2)}</td><td class="td-num">${vat.toFixed(2)}</td><td class="td-num td-bold">${total.toFixed(2)}</td>`
-      : '';
+      ? `<td>${lossCell}</td><td class="td-num">${TARIFFS.electric.toFixed(2)}</td><td class="td-num">${cost.toFixed(2)}</td><td class="td-num">${vat.toFixed(2)}</td><td class="td-num td-bold">${total.toFixed(2)}</td>`
+      : `<td>${lossCell}</td>`;
 
     const actions = can('add_reading')
       ? `<div class="actions-cell"><button class="btn btn-sm btn-accent" onclick="openAddReadingModal('electric',${meter.id})">${r?'✏️ Змінити':'+ Ввести'}</button>${can('delete_reading')&&r?`<button class="btn btn-sm btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}</div>`
@@ -1219,9 +1232,10 @@ function renderElectric(){
     <tr style="background:var(--bg3);font-weight:600">
       <td colspan="4" style="text-align:right;color:var(--text2);font-size:12px">ПІДСУМОК:</td>
       <td class="td-num" style="color:var(--green)">+${totalDiff}</td>
+      <td class="td-num" style="color:var(--yellow)">+${totalLoss.toFixed(2)}</td>
       <td></td>
-      <td class="td-num">${(totalDiff*TARIFFS.electric).toFixed(2)}</td>
-      <td class="td-num">${(totalDiff*TARIFFS.electric*TARIFFS.vat).toFixed(2)}</td>
+      <td class="td-num">${((totalDiff+totalLoss)*TARIFFS.electric).toFixed(2)}</td>
+      <td class="td-num">${((totalDiff+totalLoss)*TARIFFS.electric*TARIFFS.vat).toFixed(2)}</td>
       <td class="td-num td-bold" style="color:var(--accent)">${totalCost.toFixed(2)} грн</td>
       <td colspan="2"></td>
     </tr>
@@ -1239,7 +1253,8 @@ function renderElectric(){
         const p=getPrevReading(meter.id,m,y);
         const prev=r?.previous||(p?.current||0);
         const diff=r?(r.current-prev):null;
-        const cost=diff!==null?diff*TARIFFS.electric:0;
+        const loss=diff!==null?+(diff*0.13).toFixed(2):0;
+        const cost=diff!==null?(diff+loss)*TARIFFS.electric:0;
         const total=cost*(1+TARIFFS.vat);
         const statusChip=meter.status==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:meter.status==='inactive'?`<span class="badge badge-red">🔴 Вимкнено</span>`:'';
         const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
@@ -1251,6 +1266,7 @@ function renderElectric(){
           <div class="m-card-row"><span class="m-card-label">Поточне</span><span class="m-card-value">${r?r.current.toLocaleString():'—'}</span></div>
           <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${r?prev.toLocaleString():'—'}</span></div>
           <div class="m-card-row"><span class="m-card-label">Різниця</span><span class="m-card-value" style="color:var(--green)">${diff!==null?'+'+diff:'—'}</span></div>
+          ${diff!==null?`<div class="m-card-row"><span class="m-card-label">Втрати 13%</span><span class="m-card-value" style="color:var(--yellow)">+${loss}</span></div>`:''}
           ${can('edit_tariff')&&diff!==null?`
           <div class="m-card-row"><span class="m-card-label">Вартість без ПДВ</span><span class="m-card-value">${cost.toFixed(2)} грн</span></div>
           <div class="m-card-row"><span class="m-card-label">Всього з ПДВ</span><span class="m-card-value" style="color:var(--accent)">${total.toFixed(2)} грн</span></div>`:''}
@@ -1334,7 +1350,9 @@ function renderReports(){
   let totalKwh=0,totalM3=0;
   elMeters.forEach(meter=>{ const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y); if(r) totalKwh+=(r.current-(r.previous||(p?.current||r.current))); });
   wtMeters.forEach(meter=>{ const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y); if(r) totalM3+=(r.current-(r.previous||(p?.current||r.current))); });
-  const elCost=totalKwh*TARIFFS.electric;
+  const elLoss=+(totalKwh*0.13).toFixed(2);
+  const elKwhWithLoss=totalKwh+elLoss;
+  const elCost=elKwhWithLoss*TARIFFS.electric;
   const elVat=elCost*TARIFFS.vat;
   const elTotal=elCost+elVat;
 
@@ -1342,7 +1360,9 @@ function renderReports(){
     <div class="info-card">
       <div class="info-card-title">💰 Фінансовий звіт — Електроенергія</div>
       <div class="info-line"><span class="info-line-label">Тариф</span><span class="info-line-value">${TARIFFS.electric.toFixed(2)} грн/кВт·год</span></div>
-      <div class="info-line"><span class="info-line-label">Споживання</span><span class="info-line-value">${totalKwh.toLocaleString()} кВт·год</span></div>
+      <div class="info-line"><span class="info-line-label">Споживання (факт)</span><span class="info-line-value">${totalKwh.toLocaleString()} кВт·год</span></div>
+      <div class="info-line"><span class="info-line-label" style="color:var(--yellow)">Втрати 13%</span><span class="info-line-value" style="color:var(--yellow)">+${elLoss} кВт·год</span></div>
+      <div class="info-line"><span class="info-line-label">Разом з втратами</span><span class="info-line-value">${elKwhWithLoss.toFixed(2)} кВт·год</span></div>
       <div class="info-line"><span class="info-line-label">Вартість без ПДВ</span><span class="info-line-value">${elCost.toFixed(2)} грн</span></div>
       <div class="info-line"><span class="info-line-label">ПДВ (20%)</span><span class="info-line-value">${elVat.toFixed(2)} грн</span></div>
       <div class="info-line" style="border-top:2px solid var(--accent2);margin-top:4px;padding-top:10px">
@@ -1820,14 +1840,16 @@ function exportElectricExcel(){
   const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
   const periodLabel = `${MONTHS[m-1]} ${y}`;
 
-  const headers = ['№ Лічильника','Серійний №','Приміщення','Статус','Поточне','Попереднє','Різниця кВт','Тариф грн','Вартість грн','ПДВ 20% грн','Всього грн','Зведення','Дата введення'];
+  const headers = ['№ Лічильника','Серійний №','Приміщення','Статус','Поточне','Попереднє','Різниця кВт','Втрати 13% кВт','Разом кВт','Тариф грн','Вартість грн','ПДВ 20% грн','Всього грн','Зведення','Дата введення'];
 
   const rows = elMeters.map(meter=>{
     const r=getReading(meter.id,m,y);
     const p=getPrevReading(meter.id,m,y);
     const prev=r?.previous??(p?.current??0);
     const diff=r?(r.current-prev):null;
-    const cost=diff!=null?+(diff*TARIFFS.electric).toFixed(2):0;
+    const loss=diff!=null?+(diff*0.13).toFixed(2):0;
+    const diffWithLoss=diff!=null?+(diff+loss).toFixed(2):0;
+    const cost=diff!=null?+(diffWithLoss*TARIFFS.electric).toFixed(2):0;
     const vat=+(cost*TARIFFS.vat).toFixed(2);
     const total=+(cost+vat).toFixed(2);
     return {
@@ -1838,6 +1860,8 @@ function exportElectricExcel(){
       'Поточне':r?.current??'',
       'Попереднє':r?prev:'',
       'Різниця кВт':diff??'',
+      'Втрати 13% кВт':r?loss:'',
+      'Разом кВт':r?diffWithLoss:'',
       'Тариф грн':r?TARIFFS.electric:'',
       'Вартість грн':r?cost:'',
       'ПДВ 20% грн':r?vat:'',
@@ -1847,17 +1871,23 @@ function exportElectricExcel(){
     };
   });
 
-  // Summary row
-  const totalKwh = rows.reduce((s,r)=>s+(+r['Різниця кВт']||0),0);
-  const totalCost = rows.reduce((s,r)=>s+(+r['Вартість грн']||0),0);
-  const totalVat  = rows.reduce((s,r)=>s+(+r['ПДВ 20% грн']||0),0);
-  const totalAll  = rows.reduce((s,r)=>s+(+r['Всього грн']||0),0);
+  const totalKwh   = rows.reduce((s,r)=>s+(+r['Різниця кВт']||0),0);
+  const totalLoss  = rows.reduce((s,r)=>s+(+r['Втрати 13% кВт']||0),0);
+  const totalWith  = rows.reduce((s,r)=>s+(+r['Разом кВт']||0),0);
+  const totalCost  = rows.reduce((s,r)=>s+(+r['Вартість грн']||0),0);
+  const totalVat   = rows.reduce((s,r)=>s+(+r['ПДВ 20% грн']||0),0);
+  const totalAll   = rows.reduce((s,r)=>s+(+r['Всього грн']||0),0);
   rows.push({
     '№ Лічильника':'ПІДСУМОК','Серійний №':'','Приміщення':'','Статус':'',
     'Поточне':'','Попереднє':'',
-    'Різниця кВт':+totalKwh.toFixed(0),'Тариф грн':'',
-    'Вартість грн':+totalCost.toFixed(2),'ПДВ 20% грн':+totalVat.toFixed(2),
-    'Всього грн':+totalAll.toFixed(2),'Зведення':'','Дата введення':''
+    'Різниця кВт':+totalKwh.toFixed(0),
+    'Втрати 13% кВт':+totalLoss.toFixed(2),
+    'Разом кВт':+totalWith.toFixed(2),
+    'Тариф грн':'',
+    'Вартість грн':+totalCost.toFixed(2),
+    'ПДВ 20% грн':+totalVat.toFixed(2),
+    'Всього грн':+totalAll.toFixed(2),
+    'Зведення':'','Дата введення':''
   });
 
   const ws = XLSX.utils.json_to_sheet(rows, {header:headers});
