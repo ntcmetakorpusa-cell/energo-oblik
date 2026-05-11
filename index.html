@@ -724,6 +724,7 @@
         <div style="display:flex;gap:8px;align-items:center">
           <select class="select-filter" id="wt-month" onchange="renderWater()"></select>
           <select class="select-filter" id="wt-year" onchange="renderWater()"></select>
+          <button class="btn btn-ghost" id="btn-tariff-water" onclick="openWaterTariffModal()" style="display:none" title="Налаштування тарифів">⚙️ Тарифи</button>
           <button class="btn btn-ghost" id="btn-new-meter-wt" onclick="openMeterModal(null,'water')" style="display:none">+ Лічильник</button>
           <button class="btn btn-accent" id="btn-add-reading-wt" onclick="openAddReadingModal('water')" style="display:none">+ Додати показання</button>
           <button class="btn btn-success" id="btn-export-wt" onclick="exportWaterExcel()" style="display:none" title="Завантажити Excel">📥 Excel</button>
@@ -868,9 +869,10 @@ const TARIFFS_KEY = 'energo_tariffs_v1';
 function loadTariffs(){
   try { return JSON.parse(localStorage.getItem(TARIFFS_KEY))||null; } catch(e){ return null; }
 }
-let TARIFFS = loadTariffs() || { electric:4.32, vat:0.2, loss:0.13 };
-// ensure loss field exists for older saved data
+let TARIFFS = loadTariffs() || { electric:4.32, vat:0.2, loss:0.13, water:30.0, waterVat:0.2 };
 if(TARIFFS.loss === undefined) TARIFFS.loss = 0.13;
+if(TARIFFS.water === undefined) TARIFFS.water = 30.0;
+if(TARIFFS.waterVat === undefined) TARIFFS.waterVat = 0.2;
 function saveTariffs(){ localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS)); }
 
 // ===== GOOGLE SHEETS SYNC =====
@@ -1314,44 +1316,96 @@ function renderWater(){
   const {m,y} = getMonthYear('wt');
   const wtMeters = METERS.filter(x=>x.type==='water'&&x.status!=='inactive');
   if(can('add_reading')) document.getElementById('btn-add-reading-wt').style.display='inline-flex';
-  if(can('edit_tariff')) document.getElementById('btn-export-wt').style.display='inline-flex';
+  if(can('edit_tariff')){ document.getElementById('btn-export-wt').style.display='inline-flex'; document.getElementById('btn-tariff-water').style.display='inline-flex'; }
   if(can('meters')) document.getElementById('btn-new-meter-wt').style.display='inline-flex';
 
-  let totalDiff=0;
+  const showFin = can('edit_tariff');
+  const cols = showFin
+    ? `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, м³</th><th>Тариф, грн</th><th>Вартість, грн</th><th>ПДВ ${(TARIFFS.waterVat*100).toFixed(0)}%</th><th>Всього, грн</th><th>Примітка</th><th>Зведення</th><th>Дії</th>`
+    : `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, м³</th><th>Примітка</th><th>Зведення</th><th>Дії</th>`;
+
+  let totalDiff=0, totalCostAll=0;
+
   const rows = wtMeters.map(meter=>{
     const r=getReading(meter.id,m,y);
     const p=getPrevReading(meter.id,m,y);
     const prev=r?.previous||(p?.current||0);
-    const diff=r?(r.current-prev):null;
-    if(diff!==null) totalDiff+=diff;
-    const diffCell=diff!==null?`<span class="diff-pos">+${diff}</span>`:`<span style="color:var(--text3)">—</span>`;
-    const meterStatusChipW = meter.status==='reserve'?` <span class="badge badge-yellow" style="font-size:10px">⏸резерв</span>`:meter.status==='inactive'?` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>`:'';
-    const status=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
-    const actions=can('add_reading')?`<div class="actions-cell"><button class="btn btn-sm btn-accent" onclick="openAddReadingModal('water',${meter.id})">${r?'✏️ Змінити':'+ Ввести'}</button>${can('delete_reading')&&r?`<button class="btn btn-sm btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}</div>`:`<span style="color:var(--text3);font-size:12px">—</span>`;
+    // Fix float precision
+    const diff = r ? +((r.current - prev).toFixed(4)) : null;
+    const diffRound = diff !== null ? +diff.toFixed(2) : null;
+    if(diffRound!==null) totalDiff = +(totalDiff + diffRound).toFixed(2);
+
+    const cost   = diffRound!==null ? +(diffRound * TARIFFS.water).toFixed(2) : 0;
+    const vat    = +(cost * TARIFFS.waterVat).toFixed(2);
+    const total  = +(cost + vat).toFixed(2);
+    if(diffRound!==null) totalCostAll = +(totalCostAll + total).toFixed(2);
+
+    const diffCell = diffRound!==null
+      ? `<span class="diff-pos">+${diffRound}</span>`
+      : `<span style="color:var(--text3)">—</span>`;
+    const meterChip = meter.status==='reserve'
+      ? ` <span class="badge badge-yellow" style="font-size:10px">⏸резерв</span>`
+      : meter.status==='inactive'
+      ? ` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>` : '';
+    const status = r
+      ? `<span class="badge badge-green">✓ Введено</span>`
+      : `<span class="badge badge-red">Не введено</span>`;
+    const actions = can('add_reading')
+      ? `<div class="actions-cell"><button class="btn btn-sm btn-accent" onclick="openAddReadingModal('water',${meter.id})">${r?'✏️ Змінити':'+ Ввести'}</button>${can('delete_reading')&&r?`<button class="btn btn-sm btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}</div>`
+      : `<span style="color:var(--text3);font-size:12px">—</span>`;
+
+    const finCols = showFin
+      ? `<td class="td-num">${TARIFFS.water.toFixed(2)}</td><td class="td-num">${r?cost:'—'}</td><td class="td-num">${r?vat:'—'}</td><td class="td-num td-bold">${r?total:'—'}</td>`
+      : '';
+
     return `<tr>
-      <td><span class="badge badge-teal">${meter.number}</span>${meterStatusChipW}</td>
+      <td><span class="badge badge-teal">${meter.number}</span>${meterChip}</td>
       <td>${meter.room}</td>
       <td class="td-num">${r?r.current.toLocaleString():'—'}</td>
       <td class="td-num">${r?prev.toLocaleString():'—'}</td>
       <td>${diffCell}</td>
+      ${finCols}
       <td>${r?`<span style="color:var(--text2);font-size:12px">${r.note||'—'}</span>`:'—'}</td>
       <td>${status}</td>
       <td>${actions}</td>
     </tr>`;
   }).join('');
 
+  const summaryRow = showFin ? `
+    <tr style="background:var(--bg3);font-weight:600">
+      <td colspan="4" style="text-align:right;color:var(--text2);font-size:12px">ПІДСУМОК:</td>
+      <td class="td-num" style="color:var(--teal)">+${totalDiff}</td>
+      <td></td>
+      <td class="td-num">${(totalDiff*TARIFFS.water).toFixed(2)}</td>
+      <td class="td-num">${(totalDiff*TARIFFS.water*TARIFFS.waterVat).toFixed(2)}</td>
+      <td class="td-num td-bold" style="color:var(--accent)">${totalCostAll} грн</td>
+      <td colspan="3"></td>
+    </tr>` : '';
+
+  const tariffBar = showFin ? `
+    <div class="period-bar" style="margin-bottom:8px">
+      💧 Тариф: <strong>${TARIFFS.water.toFixed(2)} грн/м³</strong>
+      &nbsp;|&nbsp; ПДВ: <strong>${(TARIFFS.waterVat*100).toFixed(0)}%</strong>
+      &nbsp;&nbsp;<button class="btn btn-sm btn-ghost" onclick="openWaterTariffModal()" style="padding:3px 8px;font-size:11px">⚙️ Змінити</button>
+    </div>` : '';
+
   document.getElementById('wt-content').innerHTML=`
     <div class="period-bar">📅 Період: <strong>${MONTHS[m-1]} ${y}</strong> &nbsp;|&nbsp; Введено: <strong>${wtMeters.filter(meter=>getReading(meter.id,m,y)).length} / ${wtMeters.length}</strong> &nbsp;|&nbsp; <strong style="color:var(--teal)">${totalDiff} м³</strong></div>
+    ${tariffBar}
     <div class="table-wrapper">
-      <table><thead><tr><th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, м³</th><th>Примітка</th><th>Зведення</th><th>Дії</th></tr></thead>
-      <tbody>${rows}</tbody></table>
+      <div class="scroll-hint">← <span class="scroll-hint-arrow">→</span> Прокрутіть таблицю горизонтально</div>
+      <table><thead><tr>${cols}</tr></thead>
+      <tbody>${rows}${summaryRow}</tbody></table>
     </div>
     <div class="mobile-cards">
       ${wtMeters.map(meter=>{
         const r=getReading(meter.id,m,y);
         const p=getPrevReading(meter.id,m,y);
         const prev=r?.previous||(p?.current||0);
-        const diff=r?(r.current-prev):null;
+        const diff=r ? +((r.current-prev).toFixed(2)) : null;
+        const cost=diff!==null?+(diff*TARIFFS.water).toFixed(2):0;
+        const vat2=+(cost*TARIFFS.waterVat).toFixed(2);
+        const total2=+(cost+vat2).toFixed(2);
         const statusChip=meter.status==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:meter.status==='inactive'?`<span class="badge badge-red">🔴 Вимкнено</span>`:'';
         const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
         return `<div class="m-card">
@@ -1362,6 +1416,9 @@ function renderWater(){
           <div class="m-card-row"><span class="m-card-label">Поточне</span><span class="m-card-value">${r?r.current.toLocaleString():'—'}</span></div>
           <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${r?prev.toLocaleString():'—'}</span></div>
           <div class="m-card-row"><span class="m-card-label">Різниця, м³</span><span class="m-card-value" style="color:var(--teal)">${diff!==null?'+'+diff:'—'}</span></div>
+          ${showFin&&diff!==null?`
+          <div class="m-card-row"><span class="m-card-label">Вартість без ПДВ</span><span class="m-card-value">${cost} грн</span></div>
+          <div class="m-card-row"><span class="m-card-label">Всього з ПДВ</span><span class="m-card-value" style="color:var(--accent)">${total2} грн</span></div>`:''}
           ${r?.note?`<div class="m-card-row"><span class="m-card-label">Примітка</span><span style="font-size:12px;color:var(--text2)">${r.note}</span></div>`:''}
           ${can('add_reading')?`<div class="m-card-actions">
             <button class="btn btn-accent" onclick="openAddReadingModal('water',${meter.id})">${r?'✏️ Змінити':'+ Ввести показання'}</button>
@@ -2347,6 +2404,91 @@ function saveTariffModal(){
   if(document.getElementById('page-electric')?.classList.contains('active')) renderElectric();
   if(document.getElementById('page-reports')?.classList.contains('active')) renderReports();
   showNotif('Тарифи збережено ✓ (тариф: ' + elRate.toFixed(2) + ' грн, втрати: ' + loss.toFixed(1) + '%, ПДВ: ' + vat.toFixed(0) + '%)', 'success');
+}
+
+// ===== WATER TARIFF MODAL =====
+function openWaterTariffModal(){
+  document.getElementById('modal-title').textContent = '⚙️ Тарифи — Холодна вода';
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '';
+
+  const info = document.createElement('div');
+  info.style.cssText = 'background:rgba(57,197,207,.08);border:1px solid rgba(57,197,207,.25);border-radius:var(--radius);padding:12px 14px;margin-bottom:20px;font-size:12px;color:var(--text2);line-height:1.6';
+  info.textContent = '💧 Тарифи для холодної води. Зміни зберігаються у браузері та застосовуються до всіх розрахунків.';
+  body.appendChild(info);
+
+  const grid = document.createElement('div');
+  grid.className = 'modal-grid';
+
+  // Water tariff
+  const d1 = document.createElement('div');
+  d1.style.gridColumn = '1/-1';
+  d1.innerHTML = `<label class="form-label">💧 Тариф холодної води (грн / м³)</label>
+    <input class="form-input" type="number" id="wt-rate" step="0.01" min="0" value="${TARIFFS.water.toFixed(4)}" style="font-size:16px;font-weight:600" oninput="updateWaterPreview()">
+    <div style="font-size:11px;color:var(--text3);margin-top:3px">Поточний: ${TARIFFS.water.toFixed(2)} грн/м³</div>`;
+  grid.appendChild(d1);
+
+  // VAT
+  const d2 = document.createElement('div');
+  d2.style.gridColumn = '1/-1';
+  d2.innerHTML = `<label class="form-label">🧾 ПДВ (%)</label>
+    <input class="form-input" type="number" id="wt-vat" step="0.1" min="0" max="100" value="${(TARIFFS.waterVat*100).toFixed(1)}" style="font-size:16px;font-weight:600" oninput="updateWaterPreview()">
+    <div style="font-size:11px;color:var(--text3);margin-top:3px">Поточний: ${(TARIFFS.waterVat*100).toFixed(0)}%</div>`;
+  grid.appendChild(d2);
+
+  // Preview
+  const d3 = document.createElement('div');
+  d3.style.gridColumn = '1/-1';
+  d3.innerHTML = `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📊 Приклад для 100 м³</div>
+    <div id="water-tariff-preview"></div></div>`;
+  grid.appendChild(d3);
+  body.appendChild(grid);
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  const cancel = document.createElement('button');
+  cancel.className = 'btn btn-ghost'; cancel.textContent = 'Скасувати'; cancel.onclick = closeModal;
+  const save = document.createElement('button');
+  save.className = 'btn btn-accent'; save.textContent = '💾 Зберегти'; save.onclick = saveWaterTariff;
+  footer.appendChild(cancel); footer.appendChild(save);
+  body.appendChild(footer);
+
+  showModal();
+  updateWaterPreview();
+}
+
+function updateWaterPreview(){
+  const rate = parseFloat(document.getElementById('wt-rate')?.value)||0;
+  const vat  = parseFloat(document.getElementById('wt-vat')?.value)||0;
+  const base = 100;
+  const cost = +(base*rate).toFixed(2);
+  const vatA = +(cost*vat/100).toFixed(2);
+  const total= +(cost+vatA).toFixed(2);
+  const el = document.getElementById('water-tariff-preview');
+  if(!el) return;
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Споживання</span><span style="font-weight:600;color:var(--teal)">${base} м³</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Вартість без ПДВ</span><span style="font-weight:600">${cost} грн</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">ПДВ ${vat.toFixed(0)}%</span><span style="font-weight:600">${vatA} грн</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:2px solid var(--teal);font-weight:700;font-size:14px"><span>ВСЬОГО</span><span style="color:var(--teal)">${total} грн</span></div>
+    </div>`;
+}
+
+function saveWaterTariff(){
+  const rate = parseFloat(document.getElementById('wt-rate').value);
+  const vat  = parseFloat(document.getElementById('wt-vat').value);
+  if(isNaN(rate)||rate<=0){ showNotif('Введіть коректний тариф','error'); return; }
+  if(isNaN(vat)||vat<0||vat>100){ showNotif('ПДВ: від 0 до 100%','error'); return; }
+  TARIFFS.water    = rate;
+  TARIFFS.waterVat = vat/100;
+  saveTariffs();
+  closeModal();
+  if(document.getElementById('page-water')?.classList.contains('active')) renderWater();
+  if(document.getElementById('page-reports')?.classList.contains('active')) renderReports();
+  showNotif('Тариф води збережено: ' + rate.toFixed(2) + ' грн/м³, ПДВ ' + vat.toFixed(0) + '%', 'success');
 }
 
 // ===== GOOGLE SHEETS MODAL =====
