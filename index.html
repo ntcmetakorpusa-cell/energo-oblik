@@ -1142,12 +1142,17 @@ function getMonthYear(prefix){
 }
 
 function getReading(meterId,month,year){
-  return READINGS.find(r=>r.meterId===meterId&&r.month===month&&r.year===year);
+  // Only return real readings, not prefills
+  return READINGS.find(r=>r.meterId===meterId&&r.month===month&&r.year===year&&!r.isPrefill);
+}
+function getPrefill(meterId,month,year){
+  return READINGS.find(r=>r.meterId===meterId&&r.month===month&&r.year===year&&r.isPrefill);
 }
 function getPrevReading(meterId,month,year){
   let pm=month-1,py=year;
   if(pm<1){pm=12;py--;}
-  return READINGS.find(r=>r.meterId===meterId&&r.month===pm&&r.year===py);
+  // Return real reading from prev month (ignore prefill)
+  return READINGS.find(r=>r.meterId===meterId&&r.month===pm&&r.year===py&&!r.isPrefill);
 }
 
 // ===== DASHBOARD =====
@@ -1237,7 +1242,11 @@ function renderElectric(){
     const diffCell = diff!==null?`<span class="diff-pos">+${diff}</span>`:`<span style="color:var(--text3)">—</span>`;
     const lossCell = diff!==null?`<span style="color:var(--yellow);font-family:'JetBrains Mono',monospace;font-size:12px">+${loss}</span>`:`<span style="color:var(--text3)">—</span>`;
     const meterStatusChip = meter.status==='reserve'?` <span class="badge badge-yellow" style="font-size:10px">⏸резерв</span>`:meter.status==='inactive'?` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>`:'';
-    const status = r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
+    const status = r
+      ? `<span class="badge badge-green">✓ Введено</span>`
+      : getPrefill(meter.id,m,y)
+      ? `<span class="badge badge-yellow" title="Попереднє автозаповнено після 22-го">⏳ Авто-попереднє</span>`
+      : `<span class="badge badge-red">Не введено</span>`;
 
     const finCols = can('edit_tariff')
       ? `<td>${lossCell}</td><td class="td-num">${TARIFFS.electric.toFixed(2)}</td><td class="td-num">${cost.toFixed(2)}</td><td class="td-num">${vat.toFixed(2)}</td><td class="td-num td-bold">${total.toFixed(2)}</td>`
@@ -1349,6 +1358,8 @@ function renderWater(){
       ? ` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>` : '';
     const status = r
       ? `<span class="badge badge-green">✓ Введено</span>`
+      : getPrefill(meter.id,m,y)
+      ? `<span class="badge badge-yellow" title="Попереднє автозаповнено після 22-го">⏳ Авто-попереднє</span>`
       : `<span class="badge badge-red">Не введено</span>`;
     const actions = can('add_reading')
       ? `<div class="actions-cell"><button class="btn btn-sm btn-accent" onclick="openAddReadingModal('water',${meter.id})">${r?'✏️ Змінити':'+ Ввести'}</button>${can('delete_reading')&&r?`<button class="btn btn-sm btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}</div>`
@@ -1621,13 +1632,19 @@ function openAddReadingModal(type, meterId){
 
   const buildPrevBlock = (mid) => {
     const existingR = getReading(mid,m,y);
-    const prevR = getPrevReading(mid,m,y);
-    const prevVal = existingR?.previous ?? (prevR?.current ?? '');
-    // Determine source of previous reading
+    const prevR     = getPrevReading(mid,m,y);
+    const prefillR  = getPrefill(mid,m,y); // auto-prefilled after 22nd
+    // Priority: existing reading's previous → real prev month reading → prefill
+    const prevVal = existingR?.previous ?? (prevR?.current ?? (prefillR?.previous ?? ''));
     let pm=m-1, py=y; if(pm<1){pm=12;py--;}
-    const prevSource = prevR ? `автоматично з ${MONTHS[pm-1]} ${py}` : 'немає даних за попередній місяць';
-    const isAutoLoaded = !existingR && prevR;
-    const canEditPrev = can('edit_tariff'); // only admin can edit prev
+    const isPrefilled = !existingR && !prevR && prefillR;
+    const prevSource = prevR
+      ? `автоматично з ${MONTHS[pm-1]} ${py}`
+      : isPrefilled
+      ? `⏳ автозаповнено після 22-го з ${prefillR.prefillFrom}`
+      : 'немає даних за попередній місяць';
+    const isAutoLoaded = !existingR && (prevR || prefillR);
+    const canEditPrev = can('edit_tariff');
 
     return {
       prevVal, existingR, prevSource, isAutoLoaded, canEditPrev,
@@ -1638,6 +1655,10 @@ function openAddReadingModal(type, meterId){
             <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
               <span style="color:var(--text2)">Показ. за ${MONTHS[pm-1]} ${py}</span>
               <span style="font-family:monospace;font-weight:600;color:var(--green)">${prevR.current.toLocaleString()} ${unit}</span>
+            </div>` : isPrefilled ? `
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);background:rgba(210,153,34,.07);margin:0 -4px;padding:4px 4px;border-radius:4px">
+              <span style="color:var(--yellow)">⏳ Попереднє (авто з ${prefillR.prefillFrom})</span>
+              <span style="font-family:monospace;font-weight:600;color:var(--yellow)">${prefillR.previous.toLocaleString()} ${unit}</span>
             </div>` : `
             <div style="font-size:12px;color:var(--text3);padding:4px 0">⚠️ Показань за попередній місяць не знайдено</div>`}
           ${existingR ? `
@@ -1649,7 +1670,7 @@ function openAddReadingModal(type, meterId){
         <div>
           <label class="form-label">
             Попереднє показання (${unit})
-            ${isAutoLoaded ? `<span style="font-size:10px;color:var(--green);font-weight:400"> ✓ ${prevSource}</span>` : ''}
+            ${isAutoLoaded ? `<span style="font-size:10px;color:${isPrefilled?'var(--yellow)':'var(--green)'};font-weight:400"> ✓ ${prevSource}</span>` : ''}
           </label>
           <input class="form-input" type="number" id="r-prev" value="${prevVal}"
             placeholder="Введіть вручну"
@@ -1804,22 +1825,35 @@ function saveReading(type,m,y){
   const note=document.getElementById('r-note').value;
   if(!curr){ showNotif('Введіть поточне показання','error'); return; }
   if(curr<prev){ if(!confirm('Поточне показання менше попереднього. Продовжити?')) return; }
-  const existing=READINGS.findIndex(r=>r.meterId===meterId&&r.month===m&&r.year===y);
+  const existing=READINGS.findIndex(r=>r.meterId===meterId&&r.month===m&&r.year===y&&!r.isPrefill);
   const meter=METERS.find(x=>x.id===meterId);
-  const diff=curr-prev;
+  const diff=+(curr-prev).toFixed(2);
   const date=new Date().toISOString().split('T')[0];
-  if(existing>=0){ READINGS[existing].current=curr; READINGS[existing].previous=prev; READINGS[existing].note=note; }
+  if(existing>=0){ READINGS[existing].current=curr; READINGS[existing].previous=prev; READINGS[existing].note=note; READINGS[existing].enteredAt=date; }
   else { READINGS.push({ id:ridCounter++, meterId, month:m, year:y, current:curr, previous:prev, note, enteredBy:currentUser.id, enteredAt:date }); }
+
+  // ═══ AUTO-PREFILL after 22nd ═══
+  const today = new Date();
+  if(today.getDate() >= 22){
+    let nm = m+1, ny = y;
+    if(nm > 12){ nm = 1; ny++; }
+    // Remove old prefill for next month if exists
+    READINGS = READINGS.filter(r=>!(r.meterId===meterId&&r.month===nm&&r.year===ny&&r.isPrefill));
+    // Only create prefill if no real reading for next month yet
+    if(!getReading(meterId, nm, ny)){
+      READINGS.push({ id:ridCounter++, meterId, month:nm, year:ny, current:null, previous:curr, note:'', enteredBy:currentUser.id, enteredAt:date, isPrefill:true, prefillFrom:`${MONTHS[m-1]} ${y}` });
+    }
+  }
 
   // Sync to Google Sheets
   const payload = {
     type, month:m, year:y,
     meter:meter?.number||'', room:meter?.room||'', serial:meter?.serial||'',
     current:curr, previous:prev, diff,
-    tariff: type==='electric'?TARIFFS.electric:null,
-    cost:   type==='electric'?+(diff*TARIFFS.electric).toFixed(2):null,
-    vat:    type==='electric'?+(diff*TARIFFS.electric*TARIFFS.vat).toFixed(2):null,
-    total:  type==='electric'?+(diff*TARIFFS.electric*(1+TARIFFS.vat)).toFixed(2):null,
+    tariff: type==='electric'?TARIFFS.electric:TARIFFS.water,
+    cost:   type==='electric'?+(diff*(1+TARIFFS.loss)*TARIFFS.electric).toFixed(2):+(diff*TARIFFS.water).toFixed(2),
+    vat:    type==='electric'?+(diff*(1+TARIFFS.loss)*TARIFFS.electric*TARIFFS.vat).toFixed(2):+(diff*TARIFFS.water*TARIFFS.waterVat).toFixed(2),
+    total:  type==='electric'?+(diff*(1+TARIFFS.loss)*TARIFFS.electric*(1+TARIFFS.vat)).toFixed(2):+(diff*TARIFFS.water*(1+TARIFFS.waterVat)).toFixed(2),
     note, enteredBy:currentUser.name, date
   };
   syncToSheets(payload);
@@ -1827,7 +1861,12 @@ function saveReading(type,m,y){
   closeModal();
   if(type==='electric') renderElectric(); else renderWater();
   renderDashboard();
-  showNotif('Показання збережено успішно!'+(getSheetsUrl()?' + Google Sheets ✓':''),'success');
+
+  const day = today.getDate();
+  const autoMsg = day >= 22
+    ? ` | ⏳ Попереднє для ${MONTHS[m<12?m:0]} автозаповнено`
+    : '';
+  showNotif('Показання збережено ✓' + (getSheetsUrl()?' + Sheets':'') + autoMsg, 'success');
 }
 
 function deleteReading(meterId,m,y){
