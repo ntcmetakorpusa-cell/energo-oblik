@@ -1,0 +1,2043 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ЕнергоОблік — Система обліку показань лічильників</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1c2130;
+    --bg4: #21262d;
+    --border: #30363d;
+    --border2: #3d444e;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #6e7681;
+    --accent: #58a6ff;
+    --accent2: #1f6feb;
+    --green: #3fb950;
+    --green2: #196c2e;
+    --green-bg: #0d2116;
+    --red: #f85149;
+    --red2: #8b0000;
+    --red-bg: #2d1118;
+    --yellow: #d29922;
+    --yellow-bg: #2d1f00;
+    --purple: #a371f7;
+    --purple-bg: #1d1236;
+    --teal: #39c5cf;
+    --teal-bg: #0d2626;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  body.light {
+    --bg: #f4f6f9;
+    --bg2: #ffffff;
+    --bg3: #eef0f4;
+    --bg4: #e5e8ee;
+    --border: #d0d7e0;
+    --border2: #b8c2cf;
+    --text: #1a1f2e;
+    --text2: #4a5568;
+    --text3: #8896a5;
+    --accent: #1f6feb;
+    --accent2: #1558c7;
+    --green: #1a7f37;
+    --green2: #1a7f37;
+    --green-bg: #dcfce7;
+    --red: #c0392b;
+    --red2: #c0392b;
+    --red-bg: #fde8e8;
+    --yellow: #9a6700;
+    --yellow-bg: #fef3c7;
+    --purple: #7c3aed;
+    --purple-bg: #ede9fe;
+    --teal: #0e7490;
+    --teal-bg: #cffafe;
+    --shadow: 0 4px 16px rgba(0,0,0,0.12);
+  }
+  body.light #login-screen {
+    background: radial-gradient(ellipse at 30% 50%, #dbeafe 0%, #f4f6f9 60%);
+  }
+  /* theme toggle button */
+  .theme-toggle {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 20px;
+    padding: 4px 10px; cursor: pointer; font-size: 14px; display: flex;
+    align-items: center; gap: 5px; color: var(--text2); transition: all .2s;
+    font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600;
+  }
+  .theme-toggle:hover { background: var(--bg4); color: var(--text); }
+  /* meter status toggle */
+  .status-toggle { display:flex; border-radius:6px; overflow:hidden; border:1px solid var(--border); }
+  .status-btn {
+    padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer; border:none;
+    background:var(--bg3); color:var(--text3); transition:all .15s; font-family:'Manrope',sans-serif;
+  }
+  .status-btn:not(:last-child) { border-right:1px solid var(--border); }
+  .status-btn.active-status   { background:var(--green-bg); color:var(--green); }
+  .status-btn.reserve-status  { background:var(--yellow-bg); color:var(--yellow); }
+  .status-btn.inactive-status { background:var(--red-bg); color:var(--red); }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Manrope',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+  
+  /* ===== SCROLLBAR ===== */
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:var(--bg2); }
+  ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+
+  /* ===== LOGIN ===== */
+  #login-screen {
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(ellipse at 30% 50%, #0f2040 0%, #0d1117 60%);
+    z-index:1000;
+  }
+  .login-card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:16px;
+    padding:40px; width:460px; box-shadow:var(--shadow);
+    animation: fadeIn .4s ease;
+  }
+  .login-logo {
+    display:flex; align-items:center; gap:12px; margin-bottom:32px;
+  }
+  .login-logo .icon {
+    width:44px; height:44px; border-radius:10px; background:linear-gradient(135deg,#1f6feb,#58a6ff);
+    display:flex; align-items:center; justify-content:center; font-size:22px;
+  }
+  .login-logo h1 { font-size:22px; font-weight:700; letter-spacing:-.5px; }
+  .login-logo span { font-size:12px; color:var(--text2); display:block; font-weight:400; }
+  .form-group { margin-bottom:16px; }
+  .form-group label { display:block; font-size:13px; font-weight:500; color:var(--text2); margin-bottom:6px; }
+  .form-group input, .form-group select {
+    width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius);
+    padding:10px 14px; color:var(--text); font-family:'Manrope',sans-serif; font-size:14px;
+    outline:none; transition:border-color .2s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color:var(--accent); }
+  .form-group select option { background:var(--bg3); }
+  .btn-primary {
+    width:100%; padding:11px; background:var(--accent2); border:none; border-radius:var(--radius);
+    color:#fff; font-family:'Manrope',sans-serif; font-size:14px; font-weight:600;
+    cursor:pointer; transition:background .2s, transform .1s;
+  }
+  .btn-primary:hover { background:var(--accent); }
+  .btn-primary:active { transform:scale(.98); }
+  .login-hint {
+    margin-top:20px; padding:12px; background:var(--bg3); border-radius:var(--radius);
+    font-size:12px; color:var(--text3); border:1px solid var(--border);
+  }
+  .login-hint strong { color:var(--text2); display:block; margin-bottom:4px; }
+  .login-hint code { font-family:'JetBrains Mono',monospace; color:var(--accent); }
+  .error-msg { color:var(--red); font-size:13px; margin-top:10px; text-align:center; }
+
+  /* ===== APP SHELL ===== */
+  #app { display:none; min-height:100vh; }
+  
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    position:fixed; left:0; top:0; bottom:0; width:240px;
+    background:var(--bg2); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; z-index:100;
+  }
+  .sidebar-header {
+    padding:20px 20px 16px; border-bottom:1px solid var(--border);
+  }
+  .sidebar-logo { display:flex; align-items:center; gap:10px; }
+  .sidebar-logo .icon {
+    width:36px; height:36px; border-radius:8px;
+    background:linear-gradient(135deg,#1f6feb,#58a6ff);
+    display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;
+  }
+  .sidebar-logo h2 { font-size:15px; font-weight:700; line-height:1.2; }
+  .sidebar-logo small { font-size:10px; color:var(--text3); font-weight:400; }
+  .sidebar-nav { flex:1; padding:12px 8px; overflow-y:auto; }
+  .nav-section { margin-bottom:4px; }
+  .nav-section-label {
+    font-size:10px; font-weight:600; color:var(--text3); letter-spacing:.08em;
+    text-transform:uppercase; padding:6px 12px; margin-top:8px;
+  }
+  .nav-item {
+    display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border-radius:6px; cursor:pointer; font-size:13px; font-weight:500;
+    color:var(--text2); transition:all .15s; margin-bottom:1px;
+    border:none; background:none; width:100%; text-align:left;
+  }
+  .nav-item:hover { background:var(--bg3); color:var(--text); }
+  .nav-item.active { background:rgba(88,166,255,.12); color:var(--accent); }
+  .nav-item .nav-icon { font-size:16px; flex-shrink:0; }
+  .nav-item .badge {
+    margin-left:auto; background:var(--accent2); color:#fff;
+    font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px;
+  }
+  .sidebar-footer {
+    padding:12px; border-top:1px solid var(--border);
+  }
+  .user-card {
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    background:var(--bg3); border-radius:var(--radius); border:1px solid var(--border);
+  }
+  .user-avatar {
+    width:32px; height:32px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-size:12px; font-weight:700; flex-shrink:0;
+  }
+  .user-info { flex:1; min-width:0; }
+  .user-name { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .user-role { font-size:10px; color:var(--text3); }
+  .btn-logout {
+    background:none; border:none; cursor:pointer; color:var(--text3); font-size:14px;
+    padding:4px; border-radius:4px; transition:color .15s;
+  }
+  .btn-logout:hover { color:var(--red); }
+
+  /* ===== MAIN CONTENT ===== */
+  .main { margin-left:240px; min-height:100vh; padding:24px; }
+  .page-header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:24px;
+  }
+  .page-title { font-size:22px; font-weight:700; letter-spacing:-.5px; }
+  .page-subtitle { font-size:13px; color:var(--text2); margin-top:2px; }
+  .btn {
+    padding:8px 16px; border-radius:var(--radius); font-size:13px; font-weight:600;
+    cursor:pointer; transition:all .15s; display:inline-flex; align-items:center; gap:6px;
+    border:1px solid transparent; font-family:'Manrope',sans-serif;
+  }
+  .btn-sm { padding:5px 10px; font-size:12px; }
+  .btn-accent { background:var(--accent2); color:#fff; border-color:var(--accent2); }
+  .btn-accent:hover { background:var(--accent); border-color:var(--accent); }
+  .btn-ghost { background:transparent; color:var(--text2); border-color:var(--border); }
+  .btn-ghost:hover { background:var(--bg3); color:var(--text); }
+  .btn-danger { background:var(--red-bg); color:var(--red); border-color:var(--red2); }
+  .btn-danger:hover { background:rgba(248,81,73,.2); }
+  .btn-success { background:var(--green-bg); color:var(--green); border-color:var(--green2); }
+  .btn-success:hover { background:rgba(63,185,80,.15); }
+
+  /* ===== CARDS ===== */
+  .card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:20px;
+  }
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+  .stat-card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:16px 20px; position:relative; overflow:hidden;
+  }
+  .stat-card::before {
+    content:''; position:absolute; top:0; right:0;
+    width:80px; height:80px; border-radius:50%; opacity:.06;
+    transform:translate(20px,-20px);
+  }
+  .stat-card.blue::before { background:var(--accent); }
+  .stat-card.green::before { background:var(--green); }
+  .stat-card.yellow::before { background:var(--yellow); }
+  .stat-card.purple::before { background:var(--purple); }
+  .stat-label { font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+  .stat-value { font-size:26px; font-weight:700; line-height:1; margin-bottom:4px; }
+  .stat-value.blue { color:var(--accent); }
+  .stat-value.green { color:var(--green); }
+  .stat-value.yellow { color:var(--yellow); }
+  .stat-value.purple { color:var(--purple); }
+  .stat-sub { font-size:11px; color:var(--text3); }
+
+  /* ===== TABLE ===== */
+  .table-wrapper {
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg);
+    overflow:hidden;
+  }
+  .table-header {
+    padding:16px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .table-title { font-size:15px; font-weight:600; }
+  .table-controls { display:flex; gap:8px; align-items:center; }
+  .search-input {
+    background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius);
+    padding:6px 12px 6px 32px; font-size:13px; color:var(--text);
+    font-family:'Manrope',sans-serif; outline:none; width:200px; transition:border-color .2s;
+    position:relative;
+  }
+  .search-wrap { position:relative; }
+  .search-wrap::before { content:'🔍'; position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:11px; }
+  .search-input:focus { border-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; }
+  thead th {
+    padding:10px 16px; text-align:left; font-size:11px; font-weight:600;
+    color:var(--text3); text-transform:uppercase; letter-spacing:.06em;
+    background:var(--bg3); border-bottom:1px solid var(--border);
+  }
+  tbody tr { border-bottom:1px solid var(--border); transition:background .1s; }
+  tbody tr:last-child { border-bottom:none; }
+  tbody tr:hover { background:rgba(255,255,255,.02); }
+  tbody td { padding:10px 16px; font-size:13px; }
+  .td-num { font-family:'JetBrains Mono',monospace; font-size:13px; }
+  .td-bold { font-weight:600; }
+  .badge {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600;
+  }
+  .badge-green { background:var(--green-bg); color:var(--green); border:1px solid var(--green2); }
+  .badge-blue { background:rgba(88,166,255,.1); color:var(--accent); border:1px solid rgba(88,166,255,.3); }
+  .badge-yellow { background:var(--yellow-bg); color:var(--yellow); border:1px solid rgba(210,153,34,.4); }
+  .badge-red { background:var(--red-bg); color:var(--red); border:1px solid var(--red2); }
+  .badge-purple { background:var(--purple-bg); color:var(--purple); border:1px solid rgba(163,113,247,.4); }
+  .badge-teal { background:var(--teal-bg); color:var(--teal); border:1px solid rgba(57,197,207,.3); }
+  .badge-gray { background:var(--bg4); color:var(--text2); border:1px solid var(--border); }
+
+  .diff-pos { color:var(--green); font-family:'JetBrains Mono',monospace; font-size:12px; }
+  .diff-neg { color:var(--red); font-family:'JetBrains Mono',monospace; font-size:12px; }
+
+  /* ===== MODAL ===== */
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .modal-overlay.show { opacity:1; pointer-events:all; }
+  .modal {
+    background:var(--bg2); border:1px solid var(--border2); border-radius:16px;
+    width:560px; max-width:95vw; max-height:90vh; overflow-y:auto;
+    box-shadow:var(--shadow); transform:scale(.95); transition:transform .2s;
+    padding:24px;
+  }
+  .modal-overlay.show .modal { transform:scale(1); }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .modal-title { font-size:17px; font-weight:700; }
+  .modal-close {
+    background:none; border:none; color:var(--text2); cursor:pointer;
+    font-size:20px; padding:4px; border-radius:4px;
+  }
+  .modal-close:hover { color:var(--text); }
+  .modal-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal-grid.full { grid-template-columns:1fr; }
+  .form-label { font-size:12px; font-weight:600; color:var(--text2); margin-bottom:4px; display:block; }
+  .form-input, .form-select, .form-textarea {
+    width:100%; background:var(--bg3); border:1px solid var(--border);
+    border-radius:var(--radius); padding:8px 12px; color:var(--text);
+    font-family:'Manrope',sans-serif; font-size:13px; outline:none; transition:border-color .2s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color:var(--accent); }
+  .form-select option { background:var(--bg3); }
+  .form-textarea { resize:vertical; min-height:80px; }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+  .section-divider {
+    grid-column:1/-1; border-top:1px solid var(--border);
+    padding-top:12px; font-size:11px; font-weight:700; color:var(--text3);
+    text-transform:uppercase; letter-spacing:.07em;
+  }
+
+  /* ===== TABS ===== */
+  .tabs { display:flex; gap:2px; padding:4px; background:var(--bg3); border-radius:var(--radius); margin-bottom:20px; width:fit-content; }
+  .tab { padding:7px 16px; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer; color:var(--text2); border:none; background:none; transition:all .15s; font-family:'Manrope',sans-serif; }
+  .tab.active { background:var(--bg2); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.3); }
+
+  /* ===== SUMMARY BOX ===== */
+  .summary-box {
+    background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius);
+    padding:12px 16px; display:flex; align-items:center; gap:8px;
+    font-size:13px;
+  }
+  .summary-box.total { border-color:var(--accent2); background:rgba(31,111,235,.08); }
+
+  /* ===== PAGE SECTIONS ===== */
+  .page { display:none; }
+  .page.active { display:block; }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .fade-in { animation:fadeIn .3s ease; }
+
+  /* ===== NOTIFICATION ===== */
+  .notif {
+    position:fixed; top:20px; right:20px; z-index:999;
+    background:var(--bg2); border:1px solid var(--border2); border-radius:var(--radius);
+    padding:12px 16px; font-size:13px; box-shadow:var(--shadow);
+    display:flex; align-items:center; gap:10px; min-width:260px;
+    animation:slideIn .3s ease;
+  }
+  @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+  .notif.success { border-color:var(--green2); }
+  .notif.error { border-color:var(--red2); }
+
+  .select-filter {
+    background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius);
+    padding:6px 10px; color:var(--text2); font-size:12px; outline:none;
+    font-family:'Manrope',sans-serif; cursor:pointer;
+  }
+  .select-filter option { background:var(--bg3); }
+
+  .role-chip {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600;
+  }
+  .empty-state { text-align:center; padding:48px 24px; color:var(--text3); }
+  .empty-icon { font-size:40px; margin-bottom:12px; }
+  .empty-text { font-size:14px; }
+  .actions-cell { display:flex; gap:4px; }
+
+  /* Info boxes */
+  .info-row { display:flex; gap:16px; margin-bottom:24px; }
+  .info-card {
+    flex:1; background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:16px;
+  }
+  .info-card-title { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px; }
+  .info-line { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .info-line:last-child { border-bottom:none; }
+  .info-line-label { color:var(--text2); }
+  .info-line-value { font-weight:600; font-family:'JetBrains Mono',monospace; font-size:12px; }
+
+  /* ===== MOBILE BOTTOM NAV ===== */
+  .mobile-topbar {
+    display:none; position:fixed; top:0; left:0; right:0; height:56px;
+    background:var(--bg2); border-bottom:1px solid var(--border);
+    z-index:99; align-items:center; justify-content:space-between;
+    padding:0 16px;
+  }
+  .mobile-topbar-title { font-size:15px; font-weight:700; }
+  .mobile-topbar-right { display:flex; gap:8px; align-items:center; }
+  .mobile-menu-btn {
+    background:none; border:none; color:var(--text2); font-size:22px;
+    cursor:pointer; padding:4px; display:flex; align-items:center;
+  }
+  .bottom-nav {
+    display:none; position:fixed; bottom:0; left:0; right:0;
+    background:var(--bg2); border-top:1px solid var(--border);
+    z-index:99; padding:6px 0 max(6px, env(safe-area-inset-bottom));
+    justify-content:space-around;
+  }
+  .bottom-nav-item {
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    padding:4px 10px; border:none; background:none; cursor:pointer;
+    color:var(--text3); font-family:'Manrope',sans-serif; font-size:10px;
+    font-weight:600; transition:color .15s; min-width:52px;
+  }
+  .bottom-nav-item .bnav-icon { font-size:20px; line-height:1; }
+  .bottom-nav-item.active { color:var(--accent); }
+  .bottom-nav-item .bnav-badge {
+    position:absolute; top:-2px; right:4px;
+    background:var(--accent2); color:#fff; font-size:9px; font-weight:700;
+    padding:1px 4px; border-radius:8px;
+  }
+  .bnav-icon-wrap { position:relative; }
+
+  /* Mobile drawer overlay */
+  .drawer-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
+    z-index:150; opacity:0; transition:opacity .25s;
+  }
+  .drawer-overlay.open { opacity:1; }
+  .mobile-drawer {
+    position:fixed; left:0; top:0; bottom:0; width:260px;
+    background:var(--bg2); border-right:1px solid var(--border);
+    z-index:151; transform:translateX(-100%); transition:transform .25s ease;
+    display:flex; flex-direction:column;
+  }
+  .mobile-drawer.open { transform:translateX(0); }
+  .drawer-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px; border-bottom:1px solid var(--border);
+  }
+  .drawer-close { background:none; border:none; font-size:20px; color:var(--text2); cursor:pointer; }
+  .drawer-nav { flex:1; padding:8px; overflow-y:auto; }
+  .drawer-footer { padding:12px; border-top:1px solid var(--border); }
+
+  /* Mobile card layout for tables */
+  .mobile-cards { display:none; }
+  .m-card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:14px 16px; margin-bottom:10px;
+  }
+  .m-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .m-card-title { font-size:14px; font-weight:700; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .m-card-status { }
+  .m-card-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .m-card-row:last-child { border-bottom:none; padding-bottom:0; }
+  .m-card-label { color:var(--text2); font-size:12px; }
+  .m-card-value { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; }
+  .m-card-actions { display:flex; gap:8px; margin-top:12px; }
+  .m-card-actions .btn { flex:1; justify-content:center; padding:10px; font-size:13px; }
+
+  @media (max-width: 768px) {
+    /* Hide desktop elements */
+    .sidebar { display:none !important; }
+    .main { margin-left:0 !important; padding:70px 12px 80px !important; }
+    .mobile-topbar { display:flex !important; }
+    .bottom-nav { display:flex !important; }
+
+    /* Login */
+    .login-card { width:100%; max-width:100%; border-radius:0; padding:28px 20px; min-height:100vh; border:none; display:flex; flex-direction:column; justify-content:center; }
+    #login-screen { align-items:stretch; }
+
+    /* User tiles 2 cols on mobile */
+    #user-tiles { grid-template-columns:1fr 1fr !important; }
+
+    /* Stats 2 cols */
+    .stats-grid { grid-template-columns:1fr 1fr !important; gap:10px !important; }
+    .stat-value { font-size:20px !important; }
+
+    /* Hide desktop table, show mobile cards */
+    .table-wrapper { display:none !important; }
+    .mobile-cards { display:block !important; }
+
+    /* Page header stack */
+    .page-header { flex-direction:column; align-items:flex-start !important; gap:10px; }
+    .page-title { font-size:18px !important; }
+
+    /* Period bar wrap */
+    .period-bar { flex-wrap:wrap; font-size:12px !important; }
+
+    /* Info row stack */
+    .info-row { flex-direction:column !important; }
+
+    /* Modal full screen on mobile */
+    .modal {
+      width:100% !important; max-width:100% !important; border-radius:16px 16px 0 0 !important;
+      position:fixed !important; bottom:0 !important; left:0 !important; right:0 !important;
+      max-height:92vh !important; transform:translateY(100%) !important;
+    }
+    .modal-overlay.show .modal { transform:translateY(0) !important; }
+    .modal-overlay { align-items:flex-end !important; }
+    .modal-grid { grid-template-columns:1fr !important; }
+
+    /* Notif full width */
+    .notif { left:12px !important; right:12px !important; min-width:unset !important; }
+
+    /* Tabs scrollable */
+    .tabs { width:100% !important; overflow-x:auto; }
+
+    /* Form inputs bigger touch targets */
+    .form-input, .form-select, .form-textarea { padding:12px !important; font-size:16px !important; }
+    .btn-primary { padding:14px !important; font-size:16px !important; }
+
+    /* Dashboard bottom */
+    #dash-bottom { grid-template-columns:1fr !important; }
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- ===== MOBILE TOPBAR ===== -->
+<div class="mobile-topbar" id="mobile-topbar">
+  <button class="mobile-menu-btn" onclick="openDrawer()">☰</button>
+  <div class="mobile-topbar-title" id="mobile-page-title">Панель керування</div>
+  <div class="mobile-topbar-right">
+    <button class="mobile-menu-btn" onclick="toggleTheme()" style="font-size:18px" id="mobile-theme-btn">☀️</button>
+  </div>
+</div>
+
+<!-- ===== MOBILE DRAWER ===== -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<div class="mobile-drawer" id="mobile-drawer">
+  <div class="drawer-header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#1f6feb,#58a6ff);display:flex;align-items:center;justify-content:center;font-size:16px">⚡</div>
+      <span style="font-size:14px;font-weight:700">ЕнергоОблік</span>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-nav" id="drawer-nav"></div>
+  <div class="drawer-footer">
+    <div id="drawer-user-card" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <button onclick="doSwitchUser();closeDrawer()" style="padding:10px 4px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer">🔄 Змінити</button>
+      <button onclick="doLogout()" style="padding:10px 4px;border-radius:var(--radius);border:1px solid var(--red2);background:var(--red-bg);color:var(--red);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer">🚪 Вийти</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BOTTOM NAV ===== -->
+<nav class="bottom-nav" id="bottom-nav"></nav>
+
+<!-- ===== FIRST RUN SETUP ===== -->
+<div id="setup-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:2000;overflow-y:auto;padding:20px">
+  <div style="max-width:500px;margin:0 auto;padding:20px 0">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px">
+      <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#1f6feb,#58a6ff);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">⚡</div>
+      <div>
+        <div style="font-size:20px;font-weight:800">ЕнергоОблік</div>
+        <div style="font-size:13px;color:var(--text2)">Перше налаштування системи</div>
+      </div>
+    </div>
+    <div style="background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.3);border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:13px;color:var(--text2);line-height:1.6">
+      🔐 <strong style="color:var(--text)">Паролі зберігаються тільки у вашому браузері</strong> — вони не потраплять на GitHub і не будуть видні нікому іншому. Налаштуйте їх один раз на кожному пристрої.
+    </div>
+    <div id="setup-users-form"></div>
+    <button onclick="saveSetup()" style="width:100%;padding:14px;background:var(--accent2);border:none;border-radius:var(--radius);color:#fff;font-family:'Manrope',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:background .2s" onmouseover="this.style.background='var(--accent)'" onmouseout="this.style.background='var(--accent2)'">
+      ✅ Зберегти паролі та увійти
+    </button>
+    <div id="setup-error" style="color:var(--red);font-size:13px;margin-top:10px;text-align:center"></div>
+  </div>
+</div>
+
+<!-- ===== LOGIN ===== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon">⚡</div>
+      <div>
+        <h1>ЕнергоОблік</h1>
+        <span>Система обліку показань лічильників</span>
+      </div>
+    </div>
+
+    <!-- Step 1: user tiles -->
+    <div id="login-step1">
+      <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px">Оберіть обліковий запис</div>
+      <div id="user-tiles" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:4px"></div>
+    </div>
+
+    <!-- Step 2: password -->
+    <div id="login-step2" style="display:none">
+      <div id="selected-user-info" style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:16px"></div>
+      <div class="form-group">
+        <label>Пароль</label>
+        <input type="password" id="login-pass" placeholder="Введіть пароль" />
+      </div>
+      <button class="btn-primary" onclick="doLogin()">Увійти →</button>
+      <button onclick="backToStep1()" style="width:100%;margin-top:8px;padding:8px;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;font-family:'Manrope',sans-serif;">← Назад</button>
+    </div>
+
+    <div id="login-error" class="error-msg"></div>
+
+    <button onclick="openSetup()" style="width:100%;margin-top:16px;padding:8px;background:none;border:1px solid var(--border);border-radius:var(--radius);color:var(--text3);font-size:12px;cursor:pointer;font-family:'Manrope',sans-serif;">⚙️ Змінити паролі</button>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="icon">⚡</div>
+        <div>
+          <h2>ЕнергоОблік</h2>
+          <small>v2.0 — 2024</small>
+        </div>
+      </div>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <div class="sidebar-footer">
+      <div style="margin-bottom:8px">
+        <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()" style="width:100%;justify-content:center">
+          <span id="theme-icon">☀️</span> <span id="theme-label">Світла тема</span>
+        </button>
+      </div>
+      <div class="user-card" style="margin-bottom:8px">
+        <div class="user-avatar" id="user-avatar"></div>
+        <div class="user-info">
+          <div class="user-name" id="user-name-display"></div>
+          <div class="user-role" id="user-role-display"></div>
+        </div>
+      </div>
+      <div id="sidebar-footer-extra"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button onclick="doSwitchUser()" style="
+          padding:8px 4px; border-radius:var(--radius); border:1px solid var(--border);
+          background:var(--bg3); color:var(--text2); font-family:'Manrope',sans-serif;
+          font-size:11px; font-weight:600; cursor:pointer; transition:all .15s;
+          display:flex; align-items:center; justify-content:center; gap:5px;
+        " onmouseover="this.style.background='var(--bg4)';this.style.color='var(--text)'"
+           onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text2)'">
+          🔄 Змінити акаунт
+        </button>
+        <button onclick="doLogout()" style="
+          padding:8px 4px; border-radius:var(--radius); border:1px solid var(--red2);
+          background:var(--red-bg); color:var(--red); font-family:'Manrope',sans-serif;
+          font-size:11px; font-weight:600; cursor:pointer; transition:all .15s;
+          display:flex; align-items:center; justify-content:center; gap:5px;
+        " onmouseover="this.style.background='rgba(248,81,73,.2)'"
+           onmouseout="this.style.background='var(--red-bg)'">
+          🚪 Вийти
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <!-- Dashboard -->
+    <div class="page" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Панель керування</div>
+          <div class="page-subtitle" id="dash-date"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <select class="select-filter" id="dash-month" onchange="renderDashboard()"></select>
+          <select class="select-filter" id="dash-year" onchange="renderDashboard()"></select>
+        </div>
+      </div>
+      <div class="stats-grid" id="stats-grid"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" id="dash-bottom"></div>
+    </div>
+
+    <!-- Electric Meters -->
+    <div class="page" id="page-electric">
+      <div class="page-header">
+        <div>
+          <div class="page-title">⚡ Лічильники електроенергії</div>
+          <div class="page-subtitle">Всього лічильників: 17</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="select-filter" id="el-month" onchange="renderElectric()"></select>
+          <select class="select-filter" id="el-year" onchange="renderElectric()"></select>
+          <button class="btn btn-accent" id="btn-add-reading-el" onclick="openAddReadingModal('electric')" style="display:none">+ Додати показання</button>
+          <button class="btn btn-success" id="btn-export-el" onclick="exportElectricExcel()" style="display:none" title="Завантажити Excel">📥 Excel</button>
+        </div>
+      </div>
+      <div id="el-content"></div>
+    </div>
+
+    <!-- Water Meters -->
+    <div class="page" id="page-water">
+      <div class="page-header">
+        <div>
+          <div class="page-title">💧 Лічильники холодної води</div>
+          <div class="page-subtitle">Всього лічильників: 7</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="select-filter" id="wt-month" onchange="renderWater()"></select>
+          <select class="select-filter" id="wt-year" onchange="renderWater()"></select>
+          <button class="btn btn-accent" id="btn-add-reading-wt" onclick="openAddReadingModal('water')" style="display:none">+ Додати показання</button>
+          <button class="btn btn-success" id="btn-export-wt" onclick="exportWaterExcel()" style="display:none" title="Завантажити Excel">📥 Excel</button>
+        </div>
+      </div>
+      <div id="wt-content"></div>
+    </div>
+
+    <!-- Reports -->
+    <div class="page" id="page-reports">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📊 Звіти та зведення</div>
+          <div class="page-subtitle">Фінансові та технічні звіти</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <select class="select-filter" id="rep-month" onchange="renderReports()"></select>
+          <select class="select-filter" id="rep-year" onchange="renderReports()"></select>
+          <button class="btn btn-success" id="btn-export-rep" onclick="exportFullReport()" style="display:none">📥 Повний звіт Excel</button>
+        </div>
+      </div>
+      <div id="rep-content"></div>
+    </div>
+
+    <!-- Users (Admin only) -->
+    <div class="page" id="page-users">
+      <div class="page-header">
+        <div>
+          <div class="page-title">👥 Керування користувачами</div>
+          <div class="page-subtitle">Облікові записи та права доступу</div>
+        </div>
+        <button class="btn btn-accent" onclick="openUserModal()">+ Додати користувача</button>
+      </div>
+      <div id="users-content"></div>
+    </div>
+
+    <!-- Meters Admin -->
+    <div class="page" id="page-meters">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🔧 Керування лічильниками</div>
+          <div class="page-subtitle">Реєстр лічильників</div>
+        </div>
+        <button class="btn btn-accent" onclick="openMeterModal()">+ Додати лічильник</button>
+      </div>
+      <div id="meters-content"></div>
+    </div>
+  </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Заголовок</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- NOTIFICATION -->
+<div id="notif-container"></div>
+
+<!-- Config with passwords — NOT in GitHub repo, add to .gitignore -->
+<script>
+// ===== DATA =====
+const MONTHS = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
+
+const ROLES = {
+  admin:      { label:'Адміністратор', color:'badge-blue',   avatar:'А', bg:'#1f6feb', permissions:['dashboard','electric','water','reports','users','meters','add_reading','edit_reading','delete_reading','edit_tariff'] },
+  electrician:{ label:'Електрик',      color:'badge-yellow', avatar:'Е', bg:'#d29922', permissions:['dashboard','electric','add_reading'] },
+  director:   { label:'Директор',      color:'badge-purple', avatar:'Д', bg:'#a371f7', permissions:['dashboard','electric','water','reports'] },
+  accountant: { label:'Бухгалтер',     color:'badge-teal',   avatar:'Б', bg:'#39c5cf', permissions:['dashboard','electric','water','reports'] },
+};
+
+// ===== PASSWORD STORAGE via localStorage =====
+// Passwords never go to GitHub — stored only in this browser
+const PASS_KEY = 'energo_passwords_v1';
+
+const DEFAULT_USERS = [
+  { id:1, login:'admin',      name:'Адміністратор',     role:'admin',       email:'admin@energo.ua',  active:true },
+  { id:2, login:'electric1',  name:'Іваненко В.П.',     role:'electrician', email:'el1@energo.ua',    active:true },
+  { id:3, login:'electric2',  name:'Петренко О.М.',     role:'electrician', email:'el2@energo.ua',    active:true },
+  { id:4, login:'director',   name:'Директор',          role:'director',    email:'dir@energo.ua',    active:true },
+  { id:5, login:'accountant', name:'Головний бухгалтер',role:'accountant',  email:'buh@energo.ua',    active:true },
+];
+
+function loadPasswords() {
+  try { return JSON.parse(localStorage.getItem(PASS_KEY)) || {}; } catch(e) { return {}; }
+}
+function savePasswords(obj) {
+  localStorage.setItem(PASS_KEY, JSON.stringify(obj));
+}
+function getPassword(login) {
+  return loadPasswords()[login] || null;
+}
+function setPassword(login, pass) {
+  const p = loadPasswords(); p[login] = pass; savePasswords(p);
+}
+function isFirstRun() {
+  const p = loadPasswords();
+  return !p['admin']; // no admin password set yet
+}
+
+// Build USERS array with passwords from localStorage
+function buildUsersArray() {
+  const stored = JSON.parse(localStorage.getItem('energo_users_v1') || 'null') || DEFAULT_USERS.map(u=>({...u}));
+  const passwords = loadPasswords();
+  return stored.map(u => ({ ...u, password: passwords[u.login] || null }));
+}
+
+let USERS = buildUsersArray();
+
+let METERS = [];
+// Generate 17 electric meters
+for(let i=1;i<=17;i++){
+  METERS.push({ id:i, number:`ЕЛ-${String(i).padStart(3,'0')}`, type:'electric', room:`Приміщення ${i} / Корпус ${i<=9?'А':'Б'}`, status:'active', serial:`SN${100+i}` });
+}
+// Generate 7 water meters
+for(let i=1;i<=7;i++){
+  METERS.push({ id:100+i, number:`ВД-${String(i).padStart(3,'0')}`, type:'water', room:`Приміщення ${i} / Поверх ${Math.ceil(i/2)}`, status:'active', serial:`WN${200+i}` });
+}
+
+// Generate readings for last 4 months
+let READINGS = [];
+let ridCounter = 1;
+const now = new Date();
+for(let m=0; m<4; m++){
+  let d = new Date(now.getFullYear(), now.getMonth()-m, 1);
+  let month = d.getMonth()+1, year = d.getFullYear();
+  METERS.forEach(meter=>{
+    let base = meter.type==='electric' ? 50000+meter.id*1000 : 2000+meter.id*100;
+    let prev = base + m*800;
+    let curr = prev + Math.floor(Math.random()*600+200);
+    READINGS.push({ id:ridCounter++, meterId:meter.id, month, year, current:curr, previous:prev, note:'', enteredBy:2, enteredAt:'2024-01-15' });
+  });
+}
+
+let TARIFFS = { electric:4.32, vat:0.2 }; // UAH/kWh
+
+// ===== GOOGLE SHEETS SYNC =====
+const SHEETS_KEY = 'energo_sheets_url_v1';
+function getSheetsUrl(){ return localStorage.getItem(SHEETS_KEY)||''; }
+function setSheetsUrl(url){ localStorage.setItem(SHEETS_KEY, url); }
+
+async function syncToSheets(payload){
+  const url = getSheetsUrl();
+  if(!url) return; // silently skip if not configured
+  try {
+    await fetch(url, {
+      method:'POST',
+      mode:'no-cors', // Google Apps Script requires no-cors
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+  } catch(e){ console.warn('Sheets sync error:', e); }
+}
+
+let currentUser = null;
+let selectedLoginUser = null;
+
+// ===== SETUP SCREEN =====
+function openSetup(){
+  const passwords = loadPasswords();
+  const form = document.getElementById('setup-users-form');
+  form.innerHTML = DEFAULT_USERS.map(u => `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:${ROLES[u.role].bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${ROLES[u.role].avatar}</div>
+        <div>
+          <div style="font-size:13px;font-weight:700">${u.name}</div>
+          <div style="font-size:11px;color:var(--text3)">${ROLES[u.role].label} · логін: <code style="color:var(--accent)">${u.login}</code></div>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Пароль</label>
+        <input type="password" id="setup-pass-${u.login}"
+          placeholder="${passwords[u.login] ? '••••••• (вже встановлено)' : 'Введіть пароль'}"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;color:var(--text);font-family:'Manrope',sans-serif;font-size:14px;outline:none">
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('setup-screen').style.display = 'block';
+  document.getElementById('login-screen').style.display = 'none';
+}
+
+function saveSetup(){
+  const passwords = loadPasswords();
+  let changed = 0, missing = [];
+  DEFAULT_USERS.forEach(u => {
+    const val = document.getElementById('setup-pass-'+u.login)?.value?.trim();
+    if(val) { passwords[u.login] = val; changed++; }
+    else if(!passwords[u.login]) missing.push(u.name);
+  });
+  if(missing.length){
+    document.getElementById('setup-error').textContent = 'Задайте паролі для: ' + missing.join(', ');
+    return;
+  }
+  savePasswords(passwords);
+  USERS = buildUsersArray();
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  buildUserTiles();
+  showNotif('Паролі збережено в браузері ✓', 'success');
+}
+
+function checkFirstRun(){
+  if(isFirstRun()){
+    openSetup();
+  }
+}
+
+// ===== AUTH =====
+function buildUserTiles(){
+  const grid = document.getElementById('user-tiles');
+  if(!grid) return;
+  const icons = { admin:'🔑', electrician:'⚡', director:'🏢', accountant:'📊' };
+  grid.innerHTML = USERS.filter(u=>u.active).map(u=>{
+    const r = ROLES[u.role];
+    return `<button onclick="selectUser(${u.id})" style="
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:8px;padding:14px 8px;background:var(--bg3);border:1px solid var(--border);
+      border-radius:10px;cursor:pointer;transition:all .15s;font-family:'Manrope',sans-serif;
+      color:var(--text);
+    " onmouseover="this.style.background='var(--bg4)';this.style.borderColor='var(--border2)'"
+       onmouseout="this.style.background='var(--bg3)';this.style.borderColor='var(--border)'">
+      <div style="width:38px;height:38px;border-radius:9px;background:${r.bg}22;border:1px solid ${r.bg}44;display:flex;align-items:center;justify-content:center;font-size:18px">${icons[u.role]}</div>
+      <div style="font-size:11px;font-weight:600;text-align:center;line-height:1.3;color:var(--text2)">${u.name.split(' ')[0]}</div>
+    </button>`;
+  }).join('');
+}
+
+function selectUser(id){
+  selectedLoginUser = USERS.find(u=>u.id===id);
+  if(!selectedLoginUser) return;
+  const r = ROLES[selectedLoginUser.role];
+  const icons = { admin:'🔑', electrician:'⚡', director:'🏢', accountant:'📊' };
+  document.getElementById('selected-user-info').innerHTML=`
+    <div style="width:40px;height:40px;border-radius:9px;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${icons[selectedLoginUser.role]}</div>
+    <div><div style="font-size:14px;font-weight:700">${selectedLoginUser.name}</div><div style="font-size:12px;color:var(--text2)">${r.label}</div></div>
+  `;
+  document.getElementById('login-step1').style.display='none';
+  document.getElementById('login-step2').style.display='block';
+  document.getElementById('login-error').textContent='';
+  setTimeout(()=>document.getElementById('login-pass').focus(),100);
+}
+
+function backToStep1(){
+  selectedLoginUser=null;
+  document.getElementById('login-step1').style.display='block';
+  document.getElementById('login-step2').style.display='none';
+  document.getElementById('login-pass').value='';
+  document.getElementById('login-error').textContent='';
+}
+
+function doLogin(){
+  if(!selectedLoginUser){ document.getElementById('login-error').textContent='Оберіть користувача'; return; }
+  const pass = document.getElementById('login-pass').value.trim();
+  const storedPass = getPassword(selectedLoginUser.login);
+  if(!storedPass){ document.getElementById('login-error').textContent='Пароль не встановлено. Зверніться до адміністратора.'; return; }
+  if(storedPass !== pass){ document.getElementById('login-error').textContent='Невірний пароль'; return; }
+  currentUser = selectedLoginUser;
+  document.getElementById('login-error').textContent='';
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('login-pass').value='';
+  initApp();
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Enter' && document.getElementById('login-screen').style.display!=='none') doLogin(); });
+function doLogout(){ currentUser=null; selectedLoginUser=null; backToStep1(); document.getElementById('login-screen').style.display='flex'; document.getElementById('app').style.display='none'; }
+function doSwitchUser(){ currentUser=null; selectedLoginUser=null; backToStep1(); buildUserTiles(); document.getElementById('login-screen').style.display='flex'; document.getElementById('app').style.display='none'; }
+
+window.addEventListener('DOMContentLoaded', () => { initTheme(); checkFirstRun(); buildUserTiles(); });
+
+function can(perm){ return currentUser && ROLES[currentUser.role].permissions.includes(perm); }
+
+// ===== INIT =====
+function initApp(){
+  const r = ROLES[currentUser.role];
+  document.getElementById('user-avatar').textContent=r.avatar;
+  document.getElementById('user-avatar').style.background=r.bg;
+  document.getElementById('user-name-display').textContent=currentUser.name;
+  document.getElementById('user-role-display').textContent=r.label;
+  document.getElementById('dash-date').textContent = new Date().toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const duc=document.getElementById('drawer-user-card');
+  if(duc) duc.innerHTML=`<div style="width:32px;height:32px;border-radius:50%;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${r.avatar}</div><div><div style="font-size:12px;font-weight:600">${currentUser.name}</div><div style="font-size:10px;color:var(--text3)">${r.label}</div></div>`;
+  // Sheets button for admin only
+  const extra = document.getElementById('sidebar-footer-extra');
+  if(extra){
+    if(can('edit_tariff')){
+      const hasUrl = !!getSheetsUrl();
+      const btn = document.createElement('button');
+      btn.onclick = openSheetsModal;
+      btn.style.cssText = 'width:100%;margin-bottom:8px;padding:8px;border-radius:var(--radius);border:1px solid ' + (hasUrl?'var(--green2)':'var(--border)') + ';background:' + (hasUrl?'var(--green-bg)':'var(--bg3)') + ';color:' + (hasUrl?'var(--green)':'var(--text2)') + ';font-family:Manrope,sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px';
+      btn.innerHTML = '<span>📊</span> ' + (hasUrl ? 'Google Sheets ✓' : 'Підключити Google Sheets');
+      extra.innerHTML = '';
+      extra.appendChild(btn);
+    } else { extra.innerHTML=''; }
+  }
+  buildSidebar();
+  populateSelects();
+  navigateTo('dashboard');
+}
+
+function buildSidebar(){
+  const nav = document.getElementById('sidebar-nav');
+  const items = [
+    { id:'dashboard', icon:'📊', label:'Панель керування', perm:'dashboard' },
+    { id:'electric',  icon:'⚡', label:'Електроенергія',   perm:'electric', badge:17 },
+    { id:'water',     icon:'💧', label:'Холодна вода',     perm:'water', badge:7 },
+    { id:'reports',   icon:'📋', label:'Звіти',            perm:'reports' },
+    { id:'meters',    icon:'🔧', label:'Лічильники',       perm:'meters' },
+    { id:'users',     icon:'👥', label:'Користувачі',      perm:'users' },
+  ];
+  const allowed = items.filter(i=>can(i.perm));
+  // Desktop sidebar
+  nav.innerHTML = allowed.map(i=>`
+    <button class="nav-item" id="nav-${i.id}" onclick="navigateTo('${i.id}')">
+      <span class="nav-icon">${i.icon}</span> ${i.label}
+      ${i.badge?`<span class="badge">${i.badge}</span>`:''}
+    </button>
+  `).join('');
+  // Drawer nav
+  const drawerNav=document.getElementById('drawer-nav');
+  if(drawerNav) drawerNav.innerHTML = allowed.map(i=>`
+    <button class="nav-item" id="dnav-${i.id}" onclick="navigateTo('${i.id}');closeDrawer()">
+      <span class="nav-icon">${i.icon}</span> ${i.label}
+      ${i.badge?`<span class="badge">${i.badge}</span>`:''}
+    </button>
+  `).join('');
+  // Bottom nav — show first 5 most important
+  const bottomItems = allowed.slice(0,5);
+  const bn=document.getElementById('bottom-nav');
+  if(bn) bn.innerHTML = bottomItems.map(i=>`
+    <button class="bottom-nav-item" id="bnav-${i.id}" onclick="navigateTo('${i.id}')">
+      <div class="bnav-icon-wrap">
+        <span class="bnav-icon">${i.icon}</span>
+        ${i.badge?`<span class="bnav-badge">${i.badge}</span>`:''}
+      </div>
+      <span>${i.label.split(' ')[0]}</span>
+    </button>
+  `).join('');
+}
+
+function navigateTo(page){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.bottom-nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const navEl = document.getElementById('nav-'+page);
+  if(navEl) navEl.classList.add('active');
+  const dnavEl = document.getElementById('dnav-'+page);
+  if(dnavEl) dnavEl.classList.add('active');
+  const bnavEl = document.getElementById('bnav-'+page);
+  if(bnavEl) bnavEl.classList.add('active');
+  const pageEl = document.getElementById('page-'+page);
+  if(pageEl){ pageEl.classList.add('active'); pageEl.classList.add('fade-in'); }
+  // Update mobile topbar title
+  const titles={dashboard:'Панель',electric:'Електроенергія',water:'Холодна вода',reports:'Звіти',meters:'Лічильники',users:'Користувачі'};
+  const mpt=document.getElementById('mobile-page-title');
+  if(mpt) mpt.textContent=titles[page]||'';
+  if(page==='dashboard') renderDashboard();
+  if(page==='electric') renderElectric();
+  if(page==='water') renderWater();
+  if(page==='reports') renderReports();
+  if(page==='users') renderUsers();
+  if(page==='meters') renderMeters();
+}
+
+// ===== MOBILE DRAWER =====
+function openDrawer(){
+  document.getElementById('drawer-overlay').style.display='block';
+  setTimeout(()=>{document.getElementById('drawer-overlay').classList.add('open');document.getElementById('mobile-drawer').classList.add('open');},10);
+}
+function closeDrawer(){
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('mobile-drawer').classList.remove('open');
+  setTimeout(()=>document.getElementById('drawer-overlay').style.display='none',250);
+}
+
+function populateSelects(){
+  const selectors = ['dash-month','el-month','wt-month','rep-month'];
+  const yearSels  = ['dash-year','el-year','wt-year','rep-year'];
+  const curM = now.getMonth()+1, curY = now.getFullYear();
+  selectors.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el)return;
+    el.innerHTML = MONTHS.map((m,i)=>`<option value="${i+1}"${i+1===curM?' selected':''}>${m}</option>`).join('');
+  });
+  yearSels.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el)return;
+    el.innerHTML = [curY-1,curY,curY+1].map(y=>`<option value="${y}"${y===curY?' selected':''}>${y}</option>`).join('');
+  });
+}
+
+function getMonthYear(prefix){
+  const m = parseInt(document.getElementById(prefix+'-month')?.value||now.getMonth()+1);
+  const y = parseInt(document.getElementById(prefix+'-year')?.value||now.getFullYear());
+  return {m,y};
+}
+
+function getReading(meterId,month,year){
+  return READINGS.find(r=>r.meterId===meterId&&r.month===month&&r.year===year);
+}
+function getPrevReading(meterId,month,year){
+  let pm=month-1,py=year;
+  if(pm<1){pm=12;py--;}
+  return READINGS.find(r=>r.meterId===meterId&&r.month===pm&&r.year===py);
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const {m,y} = getMonthYear('dash');
+  const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
+  const wtMeters = METERS.filter(x=>x.type==='water'&&x.status!=='inactive');
+  let totalKwh=0, totalM3=0, filledEl=0, filledWt=0;
+  elMeters.forEach(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    if(r){ filledEl++; totalKwh+=(r.current-(r.previous||(p?.current||r.current))); }
+  });
+  wtMeters.forEach(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    if(r){ filledWt++; totalM3+=(r.current-(r.previous||(p?.current||r.current))); }
+  });
+  const cost = totalKwh*TARIFFS.electric;
+  const costVat = cost*(1+TARIFFS.vat);
+
+  document.getElementById('stats-grid').innerHTML=`
+    <div class="stat-card blue"><div class="stat-label">Споживання е/е</div><div class="stat-value blue">${totalKwh.toLocaleString()}</div><div class="stat-sub">кВт·год за ${MONTHS[m-1]}</div></div>
+    <div class="stat-card green"><div class="stat-label">Споживання води</div><div class="stat-value green">${totalM3.toLocaleString()}</div><div class="stat-sub">м³ за ${MONTHS[m-1]}</div></div>
+    ${can('edit_tariff')?`<div class="stat-card yellow"><div class="stat-label">Вартість (з ПДВ)</div><div class="stat-value yellow">${costVat.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00a0')}</div><div class="stat-sub">грн за ${MONTHS[m-1]}</div></div>`:`<div class="stat-card yellow"><div class="stat-label">Лічильники е/е</div><div class="stat-value yellow">${filledEl}/17</div><div class="stat-sub">показань введено</div></div>`}
+    <div class="stat-card purple"><div class="stat-label">Лічильники води</div><div class="stat-value purple">${filledWt}/7</div><div class="stat-sub">показань введено</div></div>
+  `;
+
+  // Bottom charts
+  let elRows = elMeters.slice(0,6).map(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    const diff=r?(r.current-(r.previous||(p?.current||r.current))):0;
+    return `<div class="info-line"><span class="info-line-label">${meter.number} — ${meter.room.split('/')[0].trim()}</span><span class="diff-pos">+${diff} кВт</span></div>`;
+  }).join('');
+
+  let wtRows = wtMeters.map(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    const diff=r?(r.current-(r.previous||(p?.current||r.current))):0;
+    return `<div class="info-line"><span class="info-line-label">${meter.number} — ${meter.room.split('/')[0].trim()}</span><span class="diff-pos">+${diff} м³</span></div>`;
+  }).join('');
+
+  document.getElementById('dash-bottom').innerHTML=`
+    <div class="info-card">
+      <div class="info-card-title">⚡ Топ споживачів е/е</div>
+      ${elRows}
+      <div style="margin-top:8px;font-size:12px;color:var(--text3)">...та ще ${elMeters.length-6} лічильників</div>
+    </div>
+    <div class="info-card">
+      <div class="info-card-title">💧 Споживання води</div>
+      ${wtRows}
+    </div>
+  `;
+}
+
+// ===== ELECTRIC =====
+function renderElectric(){
+  const {m,y} = getMonthYear('el');
+  const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
+  if(can('add_reading')) document.getElementById('btn-add-reading-el').style.display='inline-flex';
+  if(can('edit_tariff')) document.getElementById('btn-export-el').style.display='inline-flex';
+
+  const cols = can('edit_tariff')
+    ? `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, кВт</th><th>Тариф, грн</th><th>Вартість, грн</th><th>ПДВ 20%</th><th>Всього, грн</th><th>Зведення</th><th>Дії</th>`
+    : `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, кВт</th><th>Зведення</th><th>Дії</th>`;
+
+  let totalDiff=0, totalCost=0;
+
+  const rows = elMeters.map(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    const prev=r?.previous||(p?.current||0);
+    const diff=r?(r.current-prev):null;
+    if(diff!==null) totalDiff+=diff;
+    const cost=diff!==null?diff*TARIFFS.electric:0;
+    const vat=cost*TARIFFS.vat;
+    const total=cost+vat;
+    if(diff!==null) totalCost+=total;
+
+    const diffCell = diff!==null?`<span class="diff-pos">+${diff}</span>`:`<span style="color:var(--text3)">—</span>`;
+    const meterStatusChip = meter.status==='reserve'?` <span class="badge badge-yellow" style="font-size:10px">⏸резерв</span>`:meter.status==='inactive'?` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>`:'';
+    const status = r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
+
+    const finCols = can('edit_tariff')
+      ? `<td class="td-num">${TARIFFS.electric.toFixed(2)}</td><td class="td-num">${cost.toFixed(2)}</td><td class="td-num">${vat.toFixed(2)}</td><td class="td-num td-bold">${total.toFixed(2)}</td>`
+      : '';
+
+    const actions = can('add_reading')
+      ? `<div class="actions-cell"><button class="btn btn-sm btn-accent" onclick="openAddReadingModal('electric',${meter.id})">${r?'✏️ Змінити':'+ Ввести'}</button>${can('delete_reading')&&r?`<button class="btn btn-sm btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}</div>`
+      : `<span style="color:var(--text3);font-size:12px">—</span>`;
+
+    return `<tr>
+      <td><span class="badge badge-blue">${meter.number}</span>${meterStatusChip}</td>
+      <td>${meter.room}</td>
+      <td class="td-num">${r?r.current.toLocaleString():'—'}</td>
+      <td class="td-num">${r?prev.toLocaleString():'—'}</td>
+      <td>${diffCell}</td>
+      ${finCols}
+      <td>${status}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+
+  const summaryRow = can('edit_tariff') ? `
+    <tr style="background:var(--bg3);font-weight:600">
+      <td colspan="4" style="text-align:right;color:var(--text2);font-size:12px">ПІДСУМОК:</td>
+      <td class="td-num" style="color:var(--green)">+${totalDiff}</td>
+      <td></td>
+      <td class="td-num">${(totalDiff*TARIFFS.electric).toFixed(2)}</td>
+      <td class="td-num">${(totalDiff*TARIFFS.electric*TARIFFS.vat).toFixed(2)}</td>
+      <td class="td-num td-bold" style="color:var(--accent)">${totalCost.toFixed(2)} грн</td>
+      <td colspan="2"></td>
+    </tr>
+  ` : '';
+
+  document.getElementById('el-content').innerHTML=`
+    <div class="period-bar">📅 Період: <strong>${MONTHS[m-1]} ${y}</strong> &nbsp;|&nbsp; Введено: <strong>${elMeters.filter(meter=>getReading(meter.id,m,y)).length} / ${elMeters.length}</strong></div>
+    <div class="table-wrapper">
+      <table><thead><tr>${cols}</tr></thead>
+      <tbody>${rows}${summaryRow}</tbody></table>
+    </div>
+    <div class="mobile-cards">
+      ${elMeters.map(meter=>{
+        const r=getReading(meter.id,m,y);
+        const p=getPrevReading(meter.id,m,y);
+        const prev=r?.previous||(p?.current||0);
+        const diff=r?(r.current-prev):null;
+        const cost=diff!==null?diff*TARIFFS.electric:0;
+        const total=cost*(1+TARIFFS.vat);
+        const statusChip=meter.status==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:meter.status==='inactive'?`<span class="badge badge-red">🔴 Вимкнено</span>`:'';
+        const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
+        return `<div class="m-card">
+          <div class="m-card-header">
+            <div class="m-card-title"><span class="badge badge-blue">${meter.number}</span>${statusChip}${readingBadge}</div>
+          </div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px">📍 ${meter.room}</div>
+          <div class="m-card-row"><span class="m-card-label">Поточне</span><span class="m-card-value">${r?r.current.toLocaleString():'—'}</span></div>
+          <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${r?prev.toLocaleString():'—'}</span></div>
+          <div class="m-card-row"><span class="m-card-label">Різниця</span><span class="m-card-value" style="color:var(--green)">${diff!==null?'+'+diff:'—'}</span></div>
+          ${can('edit_tariff')&&diff!==null?`
+          <div class="m-card-row"><span class="m-card-label">Вартість без ПДВ</span><span class="m-card-value">${cost.toFixed(2)} грн</span></div>
+          <div class="m-card-row"><span class="m-card-label">Всього з ПДВ</span><span class="m-card-value" style="color:var(--accent)">${total.toFixed(2)} грн</span></div>`:''}
+          ${can('add_reading')?`<div class="m-card-actions">
+            <button class="btn btn-accent" onclick="openAddReadingModal('electric',${meter.id})">${r?'✏️ Змінити':'+ Ввести показання'}</button>
+            ${can('delete_reading')&&r?`<button class="btn btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}
+          </div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// ===== WATER =====
+function renderWater(){
+  const {m,y} = getMonthYear('wt');
+  const wtMeters = METERS.filter(x=>x.type==='water'&&x.status!=='inactive');
+  if(can('add_reading')) document.getElementById('btn-add-reading-wt').style.display='inline-flex';
+  if(can('edit_tariff')) document.getElementById('btn-export-wt').style.display='inline-flex';
+
+  let totalDiff=0;
+  const rows = wtMeters.map(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    const prev=r?.previous||(p?.current||0);
+    const diff=r?(r.current-prev):null;
+    if(diff!==null) totalDiff+=diff;
+    const diffCell=diff!==null?`<span class="diff-pos">+${diff}</span>`:`<span style="color:var(--text3)">—</span>`;
+    const meterStatusChipW = meter.status==='reserve'?` <span class="badge badge-yellow" style="font-size:10px">⏸резерв</span>`:meter.status==='inactive'?` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>`:'';
+    const status=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
+    const actions=can('add_reading')?`<div class="actions-cell"><button class="btn btn-sm btn-accent" onclick="openAddReadingModal('water',${meter.id})">${r?'✏️ Змінити':'+ Ввести'}</button>${can('delete_reading')&&r?`<button class="btn btn-sm btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}</div>`:`<span style="color:var(--text3);font-size:12px">—</span>`;
+    return `<tr>
+      <td><span class="badge badge-teal">${meter.number}</span>${meterStatusChipW}</td>
+      <td>${meter.room}</td>
+      <td class="td-num">${r?r.current.toLocaleString():'—'}</td>
+      <td class="td-num">${r?prev.toLocaleString():'—'}</td>
+      <td>${diffCell}</td>
+      <td>${r?`<span style="color:var(--text2);font-size:12px">${r.note||'—'}</span>`:'—'}</td>
+      <td>${status}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('wt-content').innerHTML=`
+    <div class="period-bar">📅 Період: <strong>${MONTHS[m-1]} ${y}</strong> &nbsp;|&nbsp; Введено: <strong>${wtMeters.filter(meter=>getReading(meter.id,m,y)).length} / ${wtMeters.length}</strong> &nbsp;|&nbsp; <strong style="color:var(--teal)">${totalDiff} м³</strong></div>
+    <div class="table-wrapper">
+      <table><thead><tr><th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, м³</th><th>Примітка</th><th>Зведення</th><th>Дії</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+    <div class="mobile-cards">
+      ${wtMeters.map(meter=>{
+        const r=getReading(meter.id,m,y);
+        const p=getPrevReading(meter.id,m,y);
+        const prev=r?.previous||(p?.current||0);
+        const diff=r?(r.current-prev):null;
+        const statusChip=meter.status==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:meter.status==='inactive'?`<span class="badge badge-red">🔴 Вимкнено</span>`:'';
+        const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
+        return `<div class="m-card">
+          <div class="m-card-header">
+            <div class="m-card-title"><span class="badge badge-teal">${meter.number}</span>${statusChip}${readingBadge}</div>
+          </div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px">📍 ${meter.room}</div>
+          <div class="m-card-row"><span class="m-card-label">Поточне</span><span class="m-card-value">${r?r.current.toLocaleString():'—'}</span></div>
+          <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${r?prev.toLocaleString():'—'}</span></div>
+          <div class="m-card-row"><span class="m-card-label">Різниця, м³</span><span class="m-card-value" style="color:var(--teal)">${diff!==null?'+'+diff:'—'}</span></div>
+          ${r?.note?`<div class="m-card-row"><span class="m-card-label">Примітка</span><span style="font-size:12px;color:var(--text2)">${r.note}</span></div>`:''}
+          ${can('add_reading')?`<div class="m-card-actions">
+            <button class="btn btn-accent" onclick="openAddReadingModal('water',${meter.id})">${r?'✏️ Змінити':'+ Ввести показання'}</button>
+            ${can('delete_reading')&&r?`<button class="btn btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}
+          </div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// ===== REPORTS =====
+function renderReports(){
+  const {m,y} = getMonthYear('rep');
+  if(can('edit_tariff')){ const btn=document.getElementById('btn-export-rep'); if(btn) btn.style.display='inline-flex'; }
+  const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
+  const wtMeters = METERS.filter(x=>x.type==='water'&&x.status!=='inactive');
+  let totalKwh=0,totalM3=0;
+  elMeters.forEach(meter=>{ const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y); if(r) totalKwh+=(r.current-(r.previous||(p?.current||r.current))); });
+  wtMeters.forEach(meter=>{ const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y); if(r) totalM3+=(r.current-(r.previous||(p?.current||r.current))); });
+  const elCost=totalKwh*TARIFFS.electric;
+  const elVat=elCost*TARIFFS.vat;
+  const elTotal=elCost+elVat;
+
+  const finBlock = can('edit_tariff')||can('reports') ? `
+    <div class="info-card">
+      <div class="info-card-title">💰 Фінансовий звіт — Електроенергія</div>
+      <div class="info-line"><span class="info-line-label">Тариф</span><span class="info-line-value">${TARIFFS.electric.toFixed(2)} грн/кВт·год</span></div>
+      <div class="info-line"><span class="info-line-label">Споживання</span><span class="info-line-value">${totalKwh.toLocaleString()} кВт·год</span></div>
+      <div class="info-line"><span class="info-line-label">Вартість без ПДВ</span><span class="info-line-value">${elCost.toFixed(2)} грн</span></div>
+      <div class="info-line"><span class="info-line-label">ПДВ (20%)</span><span class="info-line-value">${elVat.toFixed(2)} грн</span></div>
+      <div class="info-line" style="border-top:2px solid var(--accent2);margin-top:4px;padding-top:10px">
+        <span style="font-weight:700;font-size:14px">ВСЬОГО до сплати</span>
+        <span class="info-line-value" style="color:var(--accent);font-size:15px">${elTotal.toFixed(2)} грн</span>
+      </div>
+    </div>` : '';
+
+  document.getElementById('rep-content').innerHTML=`
+    <div class="tabs">
+      <button class="tab active" onclick="switchRepTab('summary',this)">Зведення</button>
+      <button class="tab" onclick="switchRepTab('monthly',this)">По місяцях</button>
+    </div>
+    <div id="rep-tab-summary">
+    <div class="info-row">
+      <div class="info-card">
+        <div class="info-card-title">⚡ Звіт по електроенергії — ${MONTHS[m-1]} ${y}</div>
+        <div class="info-line"><span class="info-line-label">Кількість лічильників</span><span class="info-line-value">${elMeters.length}</span></div>
+        <div class="info-line"><span class="info-line-label">Показань введено</span><span class="info-line-value">${elMeters.filter(x=>getReading(x.id,m,y)).length}</span></div>
+        <div class="info-line"><span class="info-line-label">Загальне споживання</span><span class="info-line-value" style="color:var(--accent)">${totalKwh.toLocaleString()} кВт·год</span></div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-title">💧 Звіт по воді — ${MONTHS[m-1]} ${y}</div>
+        <div class="info-line"><span class="info-line-label">Кількість лічильників</span><span class="info-line-value">${wtMeters.length}</span></div>
+        <div class="info-line"><span class="info-line-label">Показань введено</span><span class="info-line-value">${wtMeters.filter(x=>getReading(x.id,m,y)).length}</span></div>
+        <div class="info-line"><span class="info-line-label">Загальне споживання</span><span class="info-line-value" style="color:var(--teal)">${totalM3.toLocaleString()} м³</span></div>
+      </div>
+      ${finBlock}
+    </div>
+    ${can('edit_tariff')?`
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px">⚙️ Тарифи</div>
+      <div style="display:flex;gap:16px;align-items:flex-end">
+        <div>
+          <label class="form-label">Тариф е/е (грн/кВт·год)</label>
+          <input class="form-input" type="number" step="0.01" value="${TARIFFS.electric}" onchange="TARIFFS.electric=parseFloat(this.value);renderReports();" style="width:160px">
+        </div>
+        <div style="font-size:12px;color:var(--text2);padding-bottom:8px">ПДВ 20% нараховується автоматично</div>
+      </div>
+    </div>`:''}
+    </div>
+    <div id="rep-tab-monthly" style="display:none">
+      ${renderMonthlyTable(elMeters,wtMeters,y)}
+    </div>
+  `;
+}
+
+function renderMonthlyTable(elMeters,wtMeters,year){
+  let html='<div class="table-wrapper"><table><thead><tr><th>Місяць</th><th>е/е кВт·год</th><th>Вода м³</th>';
+  if(can('reports')) html+='<th>Вартість е/е, грн</th>';
+  html+='</tr></thead><tbody>';
+  for(let month=1;month<=12;month++){
+    let kw=0,m3=0;
+    elMeters.forEach(meter=>{ const r=getReading(meter.id,month,year); const p=getPrevReading(meter.id,month,year); if(r) kw+=(r.current-(r.previous||(p?.current||r.current))); });
+    wtMeters.forEach(meter=>{ const r=getReading(meter.id,month,year); const p=getPrevReading(meter.id,month,year); if(r) m3+=(r.current-(r.previous||(p?.current||r.current))); });
+    const cost=(kw*TARIFFS.electric*(1+TARIFFS.vat)).toFixed(2);
+    html+=`<tr><td>${MONTHS[month-1]}</td><td class="td-num" style="color:var(--accent)">${kw||'—'}</td><td class="td-num" style="color:var(--teal)">${m3||'—'}</td>${can('reports')?`<td class="td-num">${kw?cost:' —'}</td>`:''}</tr>`;
+  }
+  html+='</tbody></table></div>';
+  return html;
+}
+
+function switchRepTab(tab,btn){
+  document.querySelectorAll('#page-reports .tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('rep-tab-summary').style.display=tab==='summary'?'block':'none';
+  document.getElementById('rep-tab-monthly').style.display=tab==='monthly'?'block':'none';
+}
+
+// ===== USERS =====
+function renderUsers(){
+  const rows = USERS.map(u=>{
+    const r = ROLES[u.role];
+    return `<tr>
+      <td>${u.id}</td>
+      <td style="font-weight:600">${u.name}</td>
+      <td><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)">${u.login}</code></td>
+      <td><span class="badge ${r.color}">${r.label}</span></td>
+      <td>${u.email}</td>
+      <td>${u.active?`<span class="badge badge-green">Активний</span>`:`<span class="badge badge-red">Заблокований</span>`}</td>
+      <td><div class="actions-cell">
+        <button class="btn btn-sm btn-ghost" onclick="openUserModal(${u.id})">✏️ Редагувати</button>
+        ${u.id!==1?`<button class="btn btn-sm ${u.active?'btn-danger':'btn-success'}" onclick="toggleUser(${u.id})">${u.active?'🔒 Блокувати':'🔓 Активувати'}</button>`:''}</div></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('users-content').innerHTML=`
+    <div class="table-wrapper">
+      <table><thead><tr><th>ID</th><th>Ім'я</th><th>Логін</th><th>Роль</th><th>Email</th><th>Статус</th><th>Дії</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>`;
+}
+
+function toggleUser(id){
+  const u=USERS.find(x=>x.id===id);
+  if(!u)return;
+  u.active=!u.active;
+  renderUsers();
+  showNotif(u.active?'Користувача активовано':'Користувача заблоковано', u.active?'success':'error');
+}
+
+// ===== METERS ADMIN =====
+function renderMeters(){
+  const elM=METERS.filter(x=>x.type==='electric');
+  const wtM=METERS.filter(x=>x.type==='water');
+  const statusBadge=s=>s==='active'?`<span class="badge badge-green">✅ Активний</span>`:s==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:`<span class="badge badge-red">🔴 Неактивний</span>`;
+  const mkRows=(arr,badge)=>arr.map(m=>`<tr>
+    <td><span class="badge ${badge}">${m.number}</span></td>
+    <td class="td-num" style="font-size:12px">${m.serial}</td>
+    <td>${m.room}</td>
+    <td>${m.type==='electric'?'⚡ Електроенергія':'💧 Холодна вода'}</td>
+    <td>${statusBadge(m.status||'active')}</td>
+    <td><div class="actions-cell">
+      <button class="btn btn-sm btn-ghost" onclick="openMeterModal(${m.id})">✏️ Редагувати</button>
+    </div></td>
+  </tr>`).join('');
+
+  document.getElementById('meters-content').innerHTML=`
+    <div class="tabs" style="margin-bottom:16px">
+      <button class="tab active" onclick="switchMeterTab('electric',this)">⚡ Електроенергія (${elM.length})</button>
+      <button class="tab" onclick="switchMeterTab('water',this)">💧 Вода (${wtM.length})</button>
+    </div>
+    <div id="meter-tab-electric" class="table-wrapper">
+      <table><thead><tr><th>Номер</th><th>Серійний №</th><th>Приміщення</th><th>Тип</th><th>Статус</th><th>Дії</th></tr></thead>
+      <tbody>${mkRows(elM,'badge-blue')}</tbody></table>
+    </div>
+    <div id="meter-tab-water" class="table-wrapper" style="display:none">
+      <table><thead><tr><th>Номер</th><th>Серійний №</th><th>Приміщення</th><th>Тип</th><th>Статус</th><th>Дії</th></tr></thead>
+      <tbody>${mkRows(wtM,'badge-teal')}</tbody></table>
+    </div>`;
+}
+
+function switchMeterTab(tab,btn){
+  document.querySelectorAll('#page-meters .tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('meter-tab-electric').style.display=tab==='electric'?'block':'none';
+  document.getElementById('meter-tab-water').style.display=tab==='water'?'block':'none';
+}
+
+// ===== THEME =====
+function toggleTheme(){
+  const isLight=document.body.classList.toggle('light');
+  document.getElementById('theme-icon').textContent=isLight?'🌙':'☀️';
+  document.getElementById('theme-label').textContent=isLight?'Темна тема':'Світла тема';
+  const mBtn=document.getElementById('mobile-theme-btn');
+  if(mBtn) mBtn.textContent=isLight?'🌙':'☀️';
+  localStorage.setItem('theme',isLight?'light':'dark');
+}
+function initTheme(){
+  const saved=localStorage.getItem('theme');
+  if(saved==='light'){
+    document.body.classList.add('light');
+    const mBtn=document.getElementById('mobile-theme-btn');
+    if(mBtn) mBtn.textContent='🌙';
+  }
+}
+
+// ===== MODALS =====
+function openAddReadingModal(type, meterId){
+  const {m,y} = type==='electric' ? getMonthYear('el') : getMonthYear('wt');
+  const unit = type==='electric' ? 'кВт·год' : 'м³';
+  const typeMeters = METERS.filter(x=>x.type===type && x.status!=='inactive');
+  const options = typeMeters.map(meter=>{
+    const r = getReading(meter.id,m,y);
+    return `<option value="${meter.id}"${meter.id===meterId?' selected':''}>${meter.number} — ${meter.room.substring(0,28)}${r?' ✓':''}</option>`;
+  }).join('');
+
+  const buildPrevBlock = (mid) => {
+    const existingR = getReading(mid,m,y);
+    const prevR = getPrevReading(mid,m,y);
+    const prevVal = existingR?.previous ?? (prevR?.current ?? '');
+    // Determine source of previous reading
+    let pm=m-1, py=y; if(pm<1){pm=12;py--;}
+    const prevSource = prevR ? `автоматично з ${MONTHS[pm-1]} ${py}` : 'немає даних за попередній місяць';
+    const isAutoLoaded = !existingR && prevR;
+    const canEditPrev = can('edit_tariff'); // only admin can edit prev
+
+    return {
+      prevVal, existingR, prevSource, isAutoLoaded, canEditPrev,
+      html: `
+        <div style="grid-column:1/-1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:4px">
+          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📋 Інформація про лічильник</div>
+          ${prevR ? `
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
+              <span style="color:var(--text2)">Показ. за ${MONTHS[pm-1]} ${py}</span>
+              <span style="font-family:monospace;font-weight:600;color:var(--green)">${prevR.current.toLocaleString()} ${unit}</span>
+            </div>` : `
+            <div style="font-size:12px;color:var(--text3);padding:4px 0">⚠️ Показань за попередній місяць не знайдено</div>`}
+          ${existingR ? `
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0">
+              <span style="color:var(--text2)">Вже введено за ${MONTHS[m-1]} ${y}</span>
+              <span style="font-family:monospace;font-weight:600;color:var(--accent)">${existingR.current.toLocaleString()} ${unit}</span>
+            </div>` : ''}
+        </div>
+        <div>
+          <label class="form-label">
+            Попереднє показання (${unit})
+            ${isAutoLoaded ? `<span style="font-size:10px;color:var(--green);font-weight:400"> ✓ ${prevSource}</span>` : ''}
+          </label>
+          <input class="form-input" type="number" id="r-prev" value="${prevVal}"
+            placeholder="Введіть вручну"
+            ${!canEditPrev && isAutoLoaded ? 'readonly style="opacity:.7;cursor:not-allowed"' : ''}
+            oninput="calcDiff()">
+          ${!canEditPrev && isAutoLoaded ? `<div style="font-size:11px;color:var(--text3);margin-top:3px">🔒 Редагування доступне тільки адміністратору</div>` : ''}
+        </div>
+        <div>
+          <label class="form-label">Поточне показання (${unit})</label>
+          <input class="form-input" type="number" id="r-curr" value="${existingR?.current||''}"
+            placeholder="Введіть показання" oninput="calcDiff()" autofocus>
+        </div>
+        <div>
+          <label class="form-label">Різниця (${unit})</label>
+          <input class="form-input" type="text" id="r-diff" readonly
+            style="color:var(--green);cursor:default" placeholder="Розрахується автоматично">
+        </div>
+        <div>
+          <label class="form-label">Дата зняття</label>
+          <input class="form-input" type="date" id="r-date" value="${new Date().toISOString().split('T')[0]}">
+        </div>
+        <div style="grid-column:1/-1">
+          <label class="form-label">Примітка</label>
+          <textarea class="form-textarea" id="r-note" placeholder="Необов'язково...">${existingR?.note||''}</textarea>
+        </div>`
+    };
+  };
+
+  const firstMeter = meterId ? METERS.find(x=>x.id===meterId) : typeMeters[0];
+  const block = buildPrevBlock(firstMeter?.id);
+
+  document.getElementById('modal-title').textContent = `Введення показань — ${MONTHS[m-1]} ${y}`;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-grid">
+      <div style="grid-column:1/-1">
+        <label class="form-label">Лічильник</label>
+        <select class="form-select" id="r-meter" onchange="updatePrevReading('${type}',${m},${y})">
+          ${options}
+        </select>
+      </div>
+      ${block.html}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>
+      <button class="btn btn-accent" onclick="saveReading('${type}',${m},${y})">💾 Зберегти</button>
+    </div>`;
+  showModal();
+  setTimeout(calcDiff, 50);
+}
+
+function updatePrevReading(type,m,y){
+  const meterId=parseInt(document.getElementById('r-meter').value);
+  const r=getReading(meterId,m,y);
+  const p=getPrevReading(meterId,m,y);
+  const prevVal=r?.previous ?? (p?.current ?? '');
+  const canEdit=can('edit_tariff');
+  const prevEl=document.getElementById('r-prev');
+  if(prevEl){
+    prevEl.value=prevVal;
+    if(!canEdit && p && !r){ prevEl.readOnly=true; prevEl.style.opacity='.7'; }
+    else { prevEl.readOnly=false; prevEl.style.opacity='1'; }
+  }
+  const currEl=document.getElementById('r-curr');
+  if(currEl) currEl.value=r?.current||'';
+  calcDiff();
+}
+
+function calcDiff(){
+  const curr=parseFloat(document.getElementById('r-curr')?.value)||0;
+  const prev=parseFloat(document.getElementById('r-prev')?.value)||0;
+  const diffEl=document.getElementById('r-diff');
+  if(diffEl&&curr&&prev){ const d=curr-prev; diffEl.value=d>=0?`+${d}`:`${d}`; diffEl.style.color=d>=0?'var(--green)':'var(--red)'; }
+  else if(diffEl) diffEl.value='';
+}
+
+function saveReading(type,m,y){
+  const meterId=parseInt(document.getElementById('r-meter').value);
+  const curr=parseFloat(document.getElementById('r-curr').value);
+  const prev=parseFloat(document.getElementById('r-prev').value)||0;
+  const note=document.getElementById('r-note').value;
+  if(!curr){ showNotif('Введіть поточне показання','error'); return; }
+  if(curr<prev){ if(!confirm('Поточне показання менше попереднього. Продовжити?')) return; }
+  const existing=READINGS.findIndex(r=>r.meterId===meterId&&r.month===m&&r.year===y);
+  const meter=METERS.find(x=>x.id===meterId);
+  const diff=curr-prev;
+  const date=new Date().toISOString().split('T')[0];
+  if(existing>=0){ READINGS[existing].current=curr; READINGS[existing].previous=prev; READINGS[existing].note=note; }
+  else { READINGS.push({ id:ridCounter++, meterId, month:m, year:y, current:curr, previous:prev, note, enteredBy:currentUser.id, enteredAt:date }); }
+
+  // Sync to Google Sheets
+  const payload = {
+    type, month:m, year:y,
+    meter:meter?.number||'', room:meter?.room||'', serial:meter?.serial||'',
+    current:curr, previous:prev, diff,
+    tariff: type==='electric'?TARIFFS.electric:null,
+    cost:   type==='electric'?+(diff*TARIFFS.electric).toFixed(2):null,
+    vat:    type==='electric'?+(diff*TARIFFS.electric*TARIFFS.vat).toFixed(2):null,
+    total:  type==='electric'?+(diff*TARIFFS.electric*(1+TARIFFS.vat)).toFixed(2):null,
+    note, enteredBy:currentUser.name, date
+  };
+  syncToSheets(payload);
+
+  closeModal();
+  if(type==='electric') renderElectric(); else renderWater();
+  renderDashboard();
+  showNotif('Показання збережено успішно!'+(getSheetsUrl()?' + Google Sheets ✓':''),'success');
+}
+
+function deleteReading(meterId,m,y){
+  if(!confirm('Видалити показання? Цю дію не можна скасувати.')) return;
+  READINGS=READINGS.filter(r=>!(r.meterId===meterId&&r.month===m&&r.year===y));
+  renderElectric(); renderWater(); renderDashboard();
+  showNotif('Показання видалено','error');
+}
+
+function openUserModal(id){
+  const user=id?USERS.find(u=>u.id===id):null;
+  const roleOptions=Object.entries(ROLES).map(([k,v])=>`<option value="${k}"${user?.role===k?' selected':''}>${v.label}</option>`).join('');
+  document.getElementById('modal-title').textContent=user?'Редагувати користувача':'Новий користувач';
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-grid">
+      <div style="grid-column:1/-1"><label class="form-label">Повне ім'я</label><input class="form-input" id="u-name" value="${user?.name||''}" placeholder="Прізвище І.П."></div>
+      <div><label class="form-label">Логін</label><input class="form-input" id="u-login" value="${user?.login||''}" placeholder="login"></div>
+      <div><label class="form-label">Пароль${user?' (залиште порожнім, щоб не змінювати)':''}</label><input class="form-input" type="password" id="u-pass" placeholder="••••••••"></div>
+      <div><label class="form-label">Роль</label><select class="form-select" id="u-role">${roleOptions}</select></div>
+      <div><label class="form-label">Email</label><input class="form-input" type="email" id="u-email" value="${user?.email||''}" placeholder="email@domain.ua"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>
+      <button class="btn btn-accent" onclick="saveUser(${id||'null'})">💾 Зберегти</button>
+    </div>`;
+  showModal();
+}
+
+function saveUser(id){
+  const name=document.getElementById('u-name').value.trim();
+  const login=document.getElementById('u-login').value.trim();
+  const pass=document.getElementById('u-pass').value.trim();
+  const role=document.getElementById('u-role').value;
+  const email=document.getElementById('u-email').value.trim();
+  if(!name||!login){ showNotif("Заповніть всі обов'язкові поля",'error'); return; }
+  if(id){
+    const u=USERS.find(x=>x.id===id);
+    if(u){ u.name=name; u.login=login; u.role=role; u.email=email; }
+    if(pass) setPassword(login, pass);
+  } else {
+    if(!pass){ showNotif('Введіть пароль','error'); return; }
+    const newId=Math.max(...USERS.map(u=>u.id))+1;
+    USERS.push({ id:newId, login, name, role, email, active:true });
+    setPassword(login, pass);
+  }
+  closeModal(); renderUsers();
+  showNotif(id?'Користувача оновлено':'Користувача додано','success');
+  buildSidebar(); buildUserTiles();
+}
+
+function openMeterModal(id){
+  const meter=id?METERS.find(m=>m.id===id):null;
+  const st=meter?.status||'active';
+  document.getElementById('modal-title').textContent=meter?'Редагувати лічильник':'Новий лічильник';
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-grid">
+      <div><label class="form-label">Номер лічильника</label><input class="form-input" id="m-number" value="${meter?.number||''}" placeholder="ЕЛ-001"></div>
+      <div><label class="form-label">Серійний номер</label><input class="form-input" id="m-serial" value="${meter?.serial||''}" placeholder="SN000"></div>
+      <div style="grid-column:1/-1"><label class="form-label">Приміщення</label><input class="form-input" id="m-room" value="${meter?.room||''}" placeholder="Назва приміщення / Корпус"></div>
+      <div><label class="form-label">Тип</label><select class="form-select" id="m-type"><option value="electric"${!meter||meter.type==='electric'?' selected':''}>⚡ Електроенергія</option><option value="water"${meter?.type==='water'?' selected':''}>💧 Холодна вода</option></select></div>
+      <div>
+        <label class="form-label">Статус</label>
+        <div class="status-toggle" id="m-status-toggle">
+          <button class="status-btn active-status ${st==='active'?'active-status':''}" id="st-active"
+            onclick="setMeterStatus('active')" style="${st==='active'?'background:var(--green-bg);color:var(--green)':''}">✅ Активний</button>
+          <button class="status-btn reserve-status" id="st-reserve"
+            onclick="setMeterStatus('reserve')" style="${st==='reserve'?'background:var(--yellow-bg);color:var(--yellow)':''}">⏸ Резерв</button>
+          <button class="status-btn inactive-status" id="st-inactive"
+            onclick="setMeterStatus('inactive')" style="${st==='inactive'?'background:var(--red-bg);color:var(--red)':''}">🔴 Неактивний</button>
+        </div>
+        <input type="hidden" id="m-status" value="${st}">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>
+      <button class="btn btn-accent" onclick="saveMeter(${id||'null'})">💾 Зберегти</button>
+    </div>`;
+  showModal();
+}
+
+function setMeterStatus(val){
+  document.getElementById('m-status').value=val;
+  const colors={active:'var(--green-bg)/var(--green)',reserve:'var(--yellow-bg)/var(--yellow)',inactive:'var(--red-bg)/var(--red)'};
+  ['active','reserve','inactive'].forEach(s=>{
+    const btn=document.getElementById('st-'+s);
+    if(s===val){
+      const [bg,fg]=colors[s].split('/');
+      btn.style.background=`${bg}`; btn.style.color=`${fg}`;
+    } else {
+      btn.style.background=''; btn.style.color='';
+    }
+  });
+}
+
+function saveMeter(id){
+  const number=document.getElementById('m-number').value.trim();
+  const serial=document.getElementById('m-serial').value.trim();
+  const room=document.getElementById('m-room').value.trim();
+  const type=document.getElementById('m-type').value;
+  const status=document.getElementById('m-status').value;
+  if(!number||!room){ showNotif("Заповніть всі поля",'error'); return; }
+  if(id){
+    const m=METERS.find(x=>x.id===id);
+    if(m){ m.number=number; m.serial=serial; m.room=room; m.type=type; m.status=status; }
+  } else {
+    METERS.push({ id:Math.max(...METERS.map(m=>m.id))+1, number, serial, type, room, status });
+  }
+  closeModal(); renderMeters();
+  showNotif(id?'Лічильник оновлено':'Лічильник додано','success');
+}
+
+// ===== MODAL HELPERS =====
+function showModal(){ document.getElementById('modal').classList.add('show'); }
+function closeModal(e){ if(!e||e.target===document.getElementById('modal')) document.getElementById('modal').classList.remove('show'); }
+
+// ===== NOTIFICATIONS =====
+function showNotif(msg,type='success'){
+  const el=document.createElement('div');
+  el.className=`notif ${type}`;
+  el.innerHTML=`<span>${type==='success'?'✅':'❌'}</span> ${msg}`;
+  document.getElementById('notif-container').appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+
+// ===== EXCEL EXPORT =====
+
+// Helpers
+function xlsxColStyle(isHeader=false){
+  return isHeader ? {
+    font:{bold:true,color:{rgb:'FFFFFF'},sz:11},
+    fill:{fgColor:{rgb:'1F6FEB'}},
+    alignment:{horizontal:'center',vertical:'center',wrapText:true},
+    border:{bottom:{style:'thin',color:{rgb:'AAAAAA'}}}
+  } : {
+    alignment:{vertical:'center'},
+    border:{bottom:{style:'thin',color:{rgb:'EEEEEE'}}}
+  };
+}
+
+function autoColWidths(data){
+  if(!data.length) return [];
+  return Object.keys(data[0]).map(k=>{
+    const max = Math.max(k.length, ...data.map(r=>String(r[k]??'').length));
+    return {wch: Math.min(max+2, 40)};
+  });
+}
+
+function applyStyles(ws, headers, rows){
+  // Header row style
+  headers.forEach((_,c)=>{
+    const cell = ws[XLSX.utils.encode_cell({r:0,c})];
+    if(cell) cell.s = xlsxColStyle(true);
+  });
+  // Data rows
+  rows.forEach((_,r)=>{
+    headers.forEach((_,c)=>{
+      const cell = ws[XLSX.utils.encode_cell({r:r+1,c})];
+      if(cell){ cell.s = xlsxColStyle(false); if(typeof cell.v==='number') cell.t='n'; }
+    });
+  });
+}
+
+function downloadWorkbook(wb, filename){
+  XLSX.writeFile(wb, filename, {bookType:'xlsx',type:'binary',cellStyles:true});
+  showNotif('Файл Excel завантажено ✓','success');
+}
+
+// ---- 1. ELECTRIC EXPORT ----
+function exportElectricExcel(){
+  const {m,y} = getMonthYear('el');
+  const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
+  const periodLabel = `${MONTHS[m-1]} ${y}`;
+
+  const headers = ['№ Лічильника','Серійний №','Приміщення','Статус','Поточне','Попереднє','Різниця кВт','Тариф грн','Вартість грн','ПДВ 20% грн','Всього грн','Зведення','Дата введення'];
+
+  const rows = elMeters.map(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    const prev=r?.previous??(p?.current??0);
+    const diff=r?(r.current-prev):null;
+    const cost=diff!=null?+(diff*TARIFFS.electric).toFixed(2):0;
+    const vat=+(cost*TARIFFS.vat).toFixed(2);
+    const total=+(cost+vat).toFixed(2);
+    return {
+      '№ Лічильника':meter.number,
+      'Серійний №':meter.serial,
+      'Приміщення':meter.room,
+      'Статус':meter.status==='active'?'Активний':meter.status==='reserve'?'Резерв':'Неактивний',
+      'Поточне':r?.current??'',
+      'Попереднє':r?prev:'',
+      'Різниця кВт':diff??'',
+      'Тариф грн':r?TARIFFS.electric:'',
+      'Вартість грн':r?cost:'',
+      'ПДВ 20% грн':r?vat:'',
+      'Всього грн':r?total:'',
+      'Зведення':r?'✓ Введено':'Не введено',
+      'Дата введення':r?.enteredAt??''
+    };
+  });
+
+  // Summary row
+  const totalKwh = rows.reduce((s,r)=>s+(+r['Різниця кВт']||0),0);
+  const totalCost = rows.reduce((s,r)=>s+(+r['Вартість грн']||0),0);
+  const totalVat  = rows.reduce((s,r)=>s+(+r['ПДВ 20% грн']||0),0);
+  const totalAll  = rows.reduce((s,r)=>s+(+r['Всього грн']||0),0);
+  rows.push({
+    '№ Лічильника':'ПІДСУМОК','Серійний №':'','Приміщення':'','Статус':'',
+    'Поточне':'','Попереднє':'',
+    'Різниця кВт':+totalKwh.toFixed(0),'Тариф грн':'',
+    'Вартість грн':+totalCost.toFixed(2),'ПДВ 20% грн':+totalVat.toFixed(2),
+    'Всього грн':+totalAll.toFixed(2),'Зведення':'','Дата введення':''
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows, {header:headers});
+  ws['!cols'] = autoColWidths(rows);
+  ws['!rows'] = [{hpt:22},...rows.map(()=>({hpt:18}))];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `Ел. ${periodLabel}`);
+  downloadWorkbook(wb, `Електроенергія_${MONTHS[m-1]}_${y}.xlsx`);
+}
+
+// ---- 2. WATER EXPORT ----
+function exportWaterExcel(){
+  const {m,y} = getMonthYear('wt');
+  const wtMeters = METERS.filter(x=>x.type==='water'&&x.status!=='inactive');
+
+  const headers = ['№ Лічильника','Серійний №','Приміщення','Статус','Поточне м³','Попереднє м³','Різниця м³','Зведення','Примітка','Дата введення'];
+
+  const rows = wtMeters.map(meter=>{
+    const r=getReading(meter.id,m,y);
+    const p=getPrevReading(meter.id,m,y);
+    const prev=r?.previous??(p?.current??0);
+    const diff=r?(r.current-prev):null;
+    return {
+      '№ Лічильника':meter.number,
+      'Серійний №':meter.serial,
+      'Приміщення':meter.room,
+      'Статус':meter.status==='active'?'Активний':meter.status==='reserve'?'Резерв':'Неактивний',
+      'Поточне м³':r?.current??'',
+      'Попереднє м³':r?prev:'',
+      'Різниця м³':diff??'',
+      'Зведення':r?'✓ Введено':'Не введено',
+      'Примітка':r?.note??'',
+      'Дата введення':r?.enteredAt??''
+    };
+  });
+
+  const totalM3 = rows.reduce((s,r)=>s+(+r['Різниця м³']||0),0);
+  rows.push({'№ Лічильника':'ПІДСУМОК','Серійний №':'','Приміщення':'','Статус':'','Поточне м³':'','Попереднє м³':'','Різниця м³':totalM3,'Зведення':'','Примітка':'','Дата введення':''});
+
+  const ws = XLSX.utils.json_to_sheet(rows, {header:headers});
+  ws['!cols'] = autoColWidths(rows);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `Вода ${MONTHS[m-1]} ${y}`);
+  downloadWorkbook(wb, `Вода_${MONTHS[m-1]}_${y}.xlsx`);
+}
+
+// ---- 3. FULL REPORT EXPORT (all sheets) ----
+function exportFullReport(){
+  const {m,y} = getMonthYear('rep');
+  const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
+  const wtMeters = METERS.filter(x=>x.type==='water'&&x.status!=='inactive');
+  const wb = XLSX.utils.book_new();
+
+  // === Sheet 1: Summary ===
+  let totalKwh=0,totalM3=0,totalCostAll=0;
+  elMeters.forEach(meter=>{
+    const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y);
+    if(r) totalKwh+=(r.current-(r.previous??(p?.current??r.current)));
+  });
+  wtMeters.forEach(meter=>{
+    const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y);
+    if(r) totalM3+=(r.current-(r.previous??(p?.current??r.current)));
+  });
+  const elCost=totalKwh*TARIFFS.electric;
+  const elVat=elCost*TARIFFS.vat;
+  const elTotal=elCost+elVat;
+
+  const summaryData = [
+    {'Показник':'Звітний період','Значення':`${MONTHS[m-1]} ${y}`},
+    {'Показник':'','Значення':''},
+    {'Показник':'⚡ ЕЛЕКТРОЕНЕРГІЯ','Значення':''},
+    {'Показник':'Споживання, кВт·год','Значення':+totalKwh.toFixed(0)},
+    {'Показник':'Тариф, грн/кВт·год','Значення':TARIFFS.electric},
+    {'Показник':'Вартість без ПДВ, грн','Значення':+elCost.toFixed(2)},
+    {'Показник':'ПДВ 20%, грн','Значення':+elVat.toFixed(2)},
+    {'Показник':'ВСЬОГО до сплати, грн','Значення':+elTotal.toFixed(2)},
+    {'Показник':'','Значення':''},
+    {'Показник':'💧 ХОЛОДНА ВОДА','Значення':''},
+    {'Показник':'Споживання, м³','Значення':+totalM3.toFixed(2)},
+    {'Показник':'','Значення':''},
+    {'Показник':'Лічильники е/е — введено','Значення':`${elMeters.filter(x=>getReading(x.id,m,y)).length} / ${elMeters.length}`},
+    {'Показник':'Лічильники води — введено','Значення':`${wtMeters.filter(x=>getReading(x.id,m,y)).length} / ${wtMeters.length}`},
+  ];
+  const wsSummary = XLSX.utils.json_to_sheet(summaryData, {header:['Показник','Значення']});
+  wsSummary['!cols'] = [{wch:35},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Зведення');
+
+  // === Sheet 2: Electric detail ===
+  const elRows = elMeters.map(meter=>{
+    const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y);
+    const prev=r?.previous??(p?.current??0);
+    const diff=r?(r.current-prev):null;
+    const cost=diff!=null?+(diff*TARIFFS.electric).toFixed(2):0;
+    const vat=+(cost*TARIFFS.vat).toFixed(2);
+    return {
+      '№':meter.number,'Приміщення':meter.room,
+      'Поточне':r?.current??'','Попереднє':r?prev:'',
+      'Різниця кВт':diff??'','Тариф':TARIFFS.electric,
+      'Вартість':r?cost:'','ПДВ':r?vat:'',
+      'Всього грн':r?+(cost+vat).toFixed(2):'',
+      'Статус':r?'✓ Введено':'Не введено'
+    };
+  });
+  const wsEl = XLSX.utils.json_to_sheet(elRows, {header:['№','Приміщення','Поточне','Попереднє','Різниця кВт','Тариф','Вартість','ПДВ','Всього грн','Статус']});
+  wsEl['!cols'] = autoColWidths(elRows);
+  XLSX.utils.book_append_sheet(wb, wsEl, 'Електроенергія');
+
+  // === Sheet 3: Water detail ===
+  const wtRows = wtMeters.map(meter=>{
+    const r=getReading(meter.id,m,y); const p=getPrevReading(meter.id,m,y);
+    const prev=r?.previous??(p?.current??0);
+    const diff=r?(r.current-prev):null;
+    return {'№':meter.number,'Приміщення':meter.room,'Поточне м³':r?.current??'','Попереднє м³':r?prev:'','Різниця м³':diff??'','Примітка':r?.note??'','Статус':r?'✓ Введено':'Не введено'};
+  });
+  const wsWt = XLSX.utils.json_to_sheet(wtRows, {header:['№','Приміщення','Поточне м³','Попереднє м³','Різниця м³','Примітка','Статус']});
+  wsWt['!cols'] = autoColWidths(wtRows);
+  XLSX.utils.book_append_sheet(wb, wsWt, 'Холодна вода');
+
+  // === Sheet 4: Annual summary ===
+  const annualRows = MONTHS.map((mon,mi)=>{
+    let kw=0,m3=0;
+    elMeters.forEach(meter=>{ const r=getReading(meter.id,mi+1,y); const p=getPrevReading(meter.id,mi+1,y); if(r) kw+=(r.current-(r.previous??(p?.current??r.current))); });
+    wtMeters.forEach(meter=>{ const r=getReading(meter.id,mi+1,y); const p=getPrevReading(meter.id,mi+1,y); if(r) m3+=(r.current-(r.previous??(p?.current??r.current))); });
+    const c=kw*TARIFFS.electric; const v=c*TARIFFS.vat;
+    return {'Місяць':mon,'е/е кВт·год':kw||0,'Вода м³':m3||0,'Вартість грн':+c.toFixed(2),'ПДВ грн':+v.toFixed(2),'Всього грн':+(c+v).toFixed(2)};
+  });
+  const wsAnn = XLSX.utils.json_to_sheet(annualRows, {header:['Місяць','е/е кВт·год','Вода м³','Вартість грн','ПДВ грн','Всього грн']});
+  wsAnn['!cols'] = [{wch:14},{wch:14},{wch:12},{wch:16},{wch:12},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsAnn, `Рік ${y}`);
+
+  downloadWorkbook(wb, `ЕнергоОблік_Звіт_${MONTHS[m-1]}_${y}.xlsx`);
+}
+
+// ===== GOOGLE SHEETS MODAL =====
+function openSheetsModal(){
+  const current = getSheetsUrl();
+  document.getElementById('modal-title').textContent='📊 Підключення Google Sheets';
+  const connectedBlock = current
+    ? '<div style="background:var(--green-bg);border:1px solid var(--green2);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--green)">✅ Google Sheets підключено. Показання синхронізуються автоматично.</div>'
+    : '';
+  const disconnectBtn = current
+    ? '<button class="btn btn-danger" onclick="clearSheetsUrl()">🗑 Відключити</button>'
+    : '';
+  document.getElementById('modal-body').innerHTML =
+    '<div style="background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.25);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.7">' +
+      'Після збереження показань вони автоматично відправлятимуться у вашу Google Таблицю.<br>' +
+      '<strong style="color:var(--text)">Як отримати URL:</strong> Google Sheets → Розширення → Apps Script → Розгорнути → Веб-застосунок → скопіюйте URL' +
+    '</div>' +
+    '<div style="margin-bottom:16px">' +
+      '<label class="form-label">URL Google Apps Script (Web App URL)</label>' +
+      '<input class="form-input" id="sheets-url-input" type="url" value="' + current + '" placeholder="https://script.google.com/macros/s/XXXXX/exec" style="font-size:12px;font-family:monospace">' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px">Виглядає як: https://script.google.com/macros/s/.../exec</div>' +
+    '</div>' +
+    connectedBlock +
+    '<div class="modal-footer" style="margin-top:0">' +
+      disconnectBtn +
+      '<button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>' +
+      '<button class="btn btn-accent" onclick="saveSheetsUrl()">💾 Зберегти</button>' +
+    '</div>';
+  showModal();
+}
+function saveSheetsUrl(){
+  const val=document.getElementById('sheets-url-input').value.trim();
+  if(val && !val.startsWith('https://script.google.com')){
+    showNotif('Невірний URL. Має починатися з https://script.google.com','error'); return;
+  }
+  setSheetsUrl(val);
+  closeModal();
+  initApp(); // refresh sidebar button state
+  showNotif(val?'Google Sheets підключено ✓':'URL видалено','success');
+}
+function clearSheetsUrl(){
+  if(!confirm('Відключити Google Sheets синхронізацію?')) return;
+  setSheetsUrl('');
+  closeModal();
+  initApp();
+  showNotif('Google Sheets відключено');
+}
+</script>
+</body>
+</html>
