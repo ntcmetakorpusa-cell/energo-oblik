@@ -705,6 +705,7 @@
         <div style="display:flex;gap:8px;align-items:center">
           <select class="select-filter" id="el-month" onchange="renderElectric()"></select>
           <select class="select-filter" id="el-year" onchange="renderElectric()"></select>
+          <button class="btn btn-ghost" id="btn-tariff-settings" onclick="openTariffModal()" style="display:none" title="Налаштування тарифів">⚙️ Тарифи</button>
           <button class="btn btn-accent" id="btn-add-reading-el" onclick="openAddReadingModal('electric')" style="display:none">+ Додати показання</button>
           <button class="btn btn-success" id="btn-export-el" onclick="exportElectricExcel()" style="display:none" title="Завантажити Excel">📥 Excel</button>
         </div>
@@ -860,7 +861,15 @@ for(let m=0; m<4; m++){
   });
 }
 
-let TARIFFS = { electric:4.32, vat:0.2 }; // UAH/kWh
+// Load tariffs from localStorage (persist across sessions)
+const TARIFFS_KEY = 'energo_tariffs_v1';
+function loadTariffs(){
+  try { return JSON.parse(localStorage.getItem(TARIFFS_KEY))||null; } catch(e){ return null; }
+}
+let TARIFFS = loadTariffs() || { electric:4.32, vat:0.2, loss:0.13 };
+// ensure loss field exists for older saved data
+if(TARIFFS.loss === undefined) TARIFFS.loss = 0.13;
+function saveTariffs(){ localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS)); }
 
 // ===== GOOGLE SHEETS SYNC =====
 const SHEETS_KEY = 'energo_sheets_url_v1';
@@ -1196,9 +1205,9 @@ function renderElectric(){
   const {m,y} = getMonthYear('el');
   const elMeters = METERS.filter(x=>x.type==='electric'&&x.status!=='inactive');
   if(can('add_reading')) document.getElementById('btn-add-reading-el').style.display='inline-flex';
-  if(can('edit_tariff')) document.getElementById('btn-export-el').style.display='inline-flex';
+  if(can('edit_tariff')){ document.getElementById('btn-export-el').style.display='inline-flex'; document.getElementById('btn-tariff-settings').style.display='inline-flex'; }
 
-  const LOSS_RATE = 0.13; // Втрати 13%
+  const LOSS_RATE = TARIFFS.loss;
 
   const cols = can('edit_tariff')
     ? `<th>№ Лічильника</th><th>Приміщення</th><th>Поточне</th><th>Попереднє</th><th>Різниця, кВт</th><th>Втрати 13%, кВт</th><th>Тариф, грн</th><th>Вартість, грн</th><th>ПДВ 20%</th><th>Всього, грн</th><th>Зведення</th><th>Дії</th>`
@@ -1271,7 +1280,7 @@ function renderElectric(){
         const p=getPrevReading(meter.id,m,y);
         const prev=r?.previous||(p?.current||0);
         const diff=r?(r.current-prev):null;
-        const loss=diff!==null?+(diff*0.13).toFixed(2):0;
+        const loss=diff!==null?+(diff*TARIFFS.loss).toFixed(2):0;
         const cost=diff!==null?(diff+loss)*TARIFFS.electric:0;
         const total=cost*(1+TARIFFS.vat);
         const statusChip=meter.status==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:meter.status==='inactive'?`<span class="badge badge-red">🔴 Вимкнено</span>`:'';
@@ -1411,15 +1420,13 @@ function renderReports(){
       ${finBlock}
     </div>
     ${can('edit_tariff')?`
-    <div class="card" style="margin-bottom:16px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:12px">⚙️ Тарифи</div>
-      <div style="display:flex;gap:16px;align-items:flex-end">
-        <div>
-          <label class="form-label">Тариф е/е (грн/кВт·год)</label>
-          <input class="form-input" type="number" step="0.01" value="${TARIFFS.electric}" onchange="TARIFFS.electric=parseFloat(this.value);renderReports();" style="width:160px">
-        </div>
-        <div style="font-size:12px;color:var(--text2);padding-bottom:8px">ПДВ 20% нараховується автоматично</div>
+    <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div style="font-size:13px;color:var(--text2)">
+        ⚡ Тариф: <strong style="color:var(--text)">${TARIFFS.electric.toFixed(2)} грн/кВт·год</strong>
+        &nbsp;|&nbsp; Втрати: <strong style="color:var(--yellow)">${(TARIFFS.loss*100).toFixed(1)}%</strong>
+        &nbsp;|&nbsp; ПДВ: <strong style="color:var(--text)">${(TARIFFS.vat*100).toFixed(0)}%</strong>
       </div>
+      <button class="btn btn-ghost" onclick="openTariffModal()" style="font-size:12px">⚙️ Редагувати тарифи</button>
     </div>`:''}
     </div>
     <div id="rep-tab-monthly" style="display:none">
@@ -2204,7 +2211,102 @@ function exportFullReport(){
   downloadWorkbook(wb, `ЕнергоОблік_Звіт_${MONTHS[m-1]}_${y}.xlsx`);
 }
 
-// ===== GOOGLE SHEETS MODAL =====
+// ===== TARIFF SETTINGS MODAL =====
+function openTariffModal(){
+  document.getElementById('modal-title').textContent = '⚙️ Налаштування тарифів';
+  document.getElementById('modal-body').innerHTML =
+    '<div style="background:rgba(88,166,255,.07);border:1px solid rgba(88,166,255,.2);border-radius:var(--radius);padding:12px 14px;margin-bottom:20px;font-size:12px;color:var(--text2);line-height:1.6">' +
+      '💡 Зміни зберігаються у браузері та застосовуються до всіх розрахунків автоматично.' +
+    '</div>' +
+    '<div class="modal-grid">' +
+      // Tariff
+      '<div style="grid-column:1/-1">' +
+        '<label class="form-label">⚡ Тариф електроенергії (грн / кВт·год)</label>' +
+        '<input class="form-input" type="number" id="t-electric" step="0.01" min="0" value="' + TARIFFS.electric.toFixed(4) + '" style="font-size:16px;font-weight:600">' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px">Поточний: ' + TARIFFS.electric.toFixed(2) + ' грн/кВт·год</div>' +
+      '</div>' +
+      // Loss
+      '<div>' +
+        '<label class="form-label">📉 Втрати електроенергії (%)</label>' +
+        '<input class="form-input" type="number" id="t-loss" step="0.1" min="0" max="100" value="' + (TARIFFS.loss*100).toFixed(1) + '" style="font-size:16px;font-weight:600">' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px">Поточні: ' + (TARIFFS.loss*100).toFixed(1) + '% (нараховується на різницю)</div>' +
+      '</div>' +
+      // VAT
+      '<div>' +
+        '<label class="form-label">🧾 ПДВ (%)</label>' +
+        '<input class="form-input" type="number" id="t-vat" step="0.1" min="0" max="100" value="' + (TARIFFS.vat*100).toFixed(1) + '" style="font-size:16px;font-weight:600">' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px">Поточний: ' + (TARIFFS.vat*100).toFixed(0) + '%</div>' +
+      '</div>' +
+      // Preview
+      '<div style="grid-column:1/-1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📊 Приклад розрахунку для 1000 кВт·год</div>' +
+        '<div id="tariff-preview"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>' +
+      '<button class="btn btn-accent" onclick="saveTariffModal()">💾 Зберегти</button>' +
+    '</div>';
+  showModal();
+  updateTariffPreview();
+  // Live preview on input
+  ['t-electric','t-loss','t-vat'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', updateTariffPreview);
+  });
+}
+
+function updateTariffPreview(){
+  const elRate = parseFloat(document.getElementById('t-electric')?.value)||0;
+  const loss   = parseFloat(document.getElementById('t-loss')?.value)||0;
+  const vat    = parseFloat(document.getElementById('t-vat')?.value)||0;
+  const base = 1000;
+  const lossKwh = +(base * loss/100).toFixed(2);
+  const total   = base + lossKwh;
+  const cost    = +(total * elRate).toFixed(2);
+  const vatAmt  = +(cost * vat/100).toFixed(2);
+  const grand   = +(cost + vatAmt).toFixed(2);
+  const prev = document.getElementById('tariff-preview');
+  if(!prev) return;
+  prev.innerHTML =
+    '<div style="display:flex;flex-direction:column;gap:5px;font-size:13px">' +
+      row('Споживання (факт)', base + ' кВт·год', 'var(--accent)') +
+      row('Втрати ' + loss.toFixed(1) + '%', '+' + lossKwh + ' кВт·год', 'var(--yellow)') +
+      row('Разом з втратами', total.toFixed(2) + ' кВт·год', 'var(--text)') +
+      row('Тариф × разом', cost.toFixed(2) + ' грн', 'var(--text)') +
+      row('ПДВ ' + vat.toFixed(0) + '%', vatAmt.toFixed(2) + ' грн', 'var(--text)') +
+      '<div style="display:flex;justify-content:space-between;padding:8px 0 0;border-top:2px solid var(--accent2);font-weight:700;font-size:14px">' +
+        '<span>ВСЬОГО до сплати</span>' +
+        '<span style="color:var(--accent)">' + grand.toFixed(2) + ' грн</span>' +
+      '</div>' +
+    '</div>';
+}
+
+function row(label, value, color){
+  return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)">' +
+    '<span style="color:var(--text2)">' + label + '</span>' +
+    '<span style="font-weight:600;color:' + color + '">' + value + '</span>' +
+  '</div>';
+}
+
+function saveTariffModal(){
+  const elRate = parseFloat(document.getElementById('t-electric').value);
+  const loss   = parseFloat(document.getElementById('t-loss').value);
+  const vat    = parseFloat(document.getElementById('t-vat').value);
+  if(isNaN(elRate)||elRate<=0){ showNotif('Введіть коректний тариф','error'); return; }
+  if(isNaN(loss)||loss<0||loss>100){ showNotif('Втрати: від 0 до 100%','error'); return; }
+  if(isNaN(vat)||vat<0||vat>100){ showNotif('ПДВ: від 0 до 100%','error'); return; }
+  TARIFFS.electric = elRate;
+  TARIFFS.loss     = loss/100;
+  TARIFFS.vat      = vat/100;
+  saveTariffs();
+  closeModal();
+  // Refresh current visible page
+  if(document.getElementById('page-electric')?.classList.contains('active')) renderElectric();
+  if(document.getElementById('page-reports')?.classList.contains('active')) renderReports();
+  showNotif('Тарифи збережено ✓ (тариф: ' + elRate.toFixed(2) + ' грн, втрати: ' + loss.toFixed(1) + '%, ПДВ: ' + vat.toFixed(0) + '%)', 'success');
+}
+</script>
 function openSheetsModal(){
   const current = getSheetsUrl();
   document.getElementById('modal-title').textContent='📊 Підключення Google Sheets';
