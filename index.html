@@ -2352,29 +2352,68 @@ function saveTariffModal(){
 // ===== GOOGLE SHEETS MODAL =====
 function openSheetsModal(){
   const current = getSheetsUrl();
-  document.getElementById('modal-title').textContent='📊 Підключення Google Sheets';
-  const connectedBlock = current
-    ? '<div style="background:var(--green-bg);border:1px solid var(--green2);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--green)">✅ Google Sheets підключено. Показання синхронізуються автоматично.</div>'
-    : '';
-  const disconnectBtn = current
-    ? '<button class="btn btn-danger" onclick="clearSheetsUrl()">🗑 Відключити</button>'
-    : '';
-  document.getElementById('modal-body').innerHTML =
-    '<div style="background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.25);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.7">' +
-      'Після збереження показань вони автоматично відправлятимуться у вашу Google Таблицю.<br>' +
-      '<strong style="color:var(--text)">Як отримати URL:</strong> Google Sheets → Розширення → Apps Script → Розгорнути → Веб-застосунок → скопіюйте URL' +
-    '</div>' +
-    '<div style="margin-bottom:16px">' +
-      '<label class="form-label">URL Google Apps Script (Web App URL)</label>' +
-      '<input class="form-input" id="sheets-url-input" type="url" value="' + current + '" placeholder="https://script.google.com/macros/s/XXXXX/exec" style="font-size:12px;font-family:monospace">' +
-      '<div style="font-size:11px;color:var(--text3);margin-top:4px">Виглядає як: https://script.google.com/macros/s/.../exec</div>' +
-    '</div>' +
-    connectedBlock +
-    '<div class="modal-footer" style="margin-top:0">' +
-      disconnectBtn +
-      '<button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>' +
-      '<button class="btn btn-accent" onclick="saveSheetsUrl()">💾 Зберегти</button>' +
-    '</div>';
+  document.getElementById('modal-title').textContent = '📊 Підключення Google Sheets';
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '';
+
+  // Info box
+  const info = document.createElement('div');
+  info.style.cssText = 'background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.25);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.7';
+  info.innerHTML = 'Після збереження показань вони автоматично відправлятимуться у вашу Google Таблицю.<br><strong style="color:var(--text)">Як отримати URL:</strong> Google Sheets → Розширення → Apps Script → Розгорнути → Веб-застосунок → скопіюйте URL';
+  body.appendChild(info);
+
+  // URL input block
+  const inputWrap = document.createElement('div');
+  inputWrap.style.marginBottom = '16px';
+  const lbl = document.createElement('label');
+  lbl.className = 'form-label';
+  lbl.textContent = 'URL Google Apps Script (Web App URL)';
+  const inp = document.createElement('input');
+  inp.className = 'form-input';
+  inp.id = 'sheets-url-input';
+  inp.type = 'url';
+  inp.value = current;
+  inp.placeholder = 'https://script.google.com/macros/s/XXXXX/exec';
+  inp.style.cssText = 'font-size:12px;font-family:monospace;margin-top:4px';
+  const hint = document.createElement('div');
+  hint.style.cssText = 'font-size:11px;color:var(--text3);margin-top:4px';
+  hint.textContent = 'Виглядає як: https://script.google.com/macros/s/.../exec';
+  inputWrap.appendChild(lbl);
+  inputWrap.appendChild(inp);
+  inputWrap.appendChild(hint);
+  body.appendChild(inputWrap);
+
+  // Connected status
+  if(current){
+    const ok = document.createElement('div');
+    ok.style.cssText = 'background:var(--green-bg);border:1px solid var(--green2);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--green)';
+    ok.textContent = '✅ Google Sheets підключено. Показання синхронізуються автоматично.';
+    body.appendChild(ok);
+  }
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  footer.style.marginTop = '0';
+  if(current){
+    const discBtn = document.createElement('button');
+    discBtn.className = 'btn btn-danger';
+    discBtn.textContent = '🗑 Відключити';
+    discBtn.onclick = clearSheetsUrl;
+    footer.appendChild(discBtn);
+  }
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-ghost';
+  cancelBtn.textContent = 'Скасувати';
+  cancelBtn.onclick = closeModal;
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-accent';
+  saveBtn.textContent = '💾 Зберегти';
+  saveBtn.onclick = saveSheetsUrl;
+  footer.appendChild(cancelBtn);
+  footer.appendChild(saveBtn);
+  body.appendChild(footer);
+
   showModal();
 }
 function saveSheetsUrl(){
