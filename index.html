@@ -245,15 +245,27 @@
   /* ===== TABLE ===== */
   .table-wrapper {
     background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius-lg);
-    overflow-x:auto; /* горизонтальний скрол */
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
   }
-  .table-wrapper table { min-width:max-content; } /* таблиця не стискається */
+  .table-wrapper table { min-width:max-content; width:100%; }
   /* Кнопки "Дії" завжди видимі праворуч */
   tbody td:last-child, thead th:last-child {
-    position:sticky; right:0; background:var(--bg2); z-index:1;
-    box-shadow:-3px 0 8px rgba(0,0,0,.15);
+    position:sticky; right:0;
+    background:var(--bg2);
+    z-index:2;
+    box-shadow:-4px 0 10px rgba(0,0,0,.18);
   }
-  tbody tr:hover td:last-child { background:var(--bg3); }
+  thead th:last-child { background:var(--bg3); z-index:3; }
+  tbody tr:hover td:last-child { background:var(--bg4); }
+  /* scroll hint bar */
+  .scroll-hint {
+    display:flex; align-items:center; gap:6px; padding:5px 12px;
+    font-size:11px; color:var(--text3); border-bottom:1px solid var(--border);
+    background:var(--bg3);
+  }
+  .scroll-hint-arrow { animation:scrollPulse 1.5s infinite; }
+  @keyframes scrollPulse { 0%,100%{transform:translateX(0)} 50%{transform:translateX(4px)} }
   .table-header {
     padding:16px 20px; border-bottom:1px solid var(--border);
     display:flex; align-items:center; justify-content:space-between;
@@ -984,7 +996,12 @@ function doSwitchUser(){ currentUser=null; selectedLoginUser=null; backToStep1()
 
 window.addEventListener('DOMContentLoaded', () => { initTheme(); checkFirstRun(); buildUserTiles(); });
 
-function can(perm){ return currentUser && ROLES[currentUser.role].permissions.includes(perm); }
+function can(perm){
+  if(!currentUser) return false;
+  // Custom permissions override role defaults
+  if(currentUser.customPermissions) return currentUser.customPermissions.includes(perm);
+  return ROLES[currentUser.role].permissions.includes(perm);
+}
 
 // ===== INIT =====
 function initApp(){
@@ -1244,6 +1261,7 @@ function renderElectric(){
   document.getElementById('el-content').innerHTML=`
     <div class="period-bar">📅 Період: <strong>${MONTHS[m-1]} ${y}</strong> &nbsp;|&nbsp; Введено: <strong>${elMeters.filter(meter=>getReading(meter.id,m,y)).length} / ${elMeters.length}</strong></div>
     <div class="table-wrapper">
+      <div class="scroll-hint">← <span class="scroll-hint-arrow">→</span> Прокрутіть таблицю горизонтально &nbsp;|&nbsp; Кнопка "Змінити" закріплена праворуч</div>
       <table><thead><tr>${cols}</tr></thead>
       <tbody>${rows}${summaryRow}</tbody></table>
     </div>
@@ -1436,11 +1454,14 @@ function switchRepTab(tab,btn){
 function renderUsers(){
   const rows = USERS.map(u=>{
     const r = ROLES[u.role];
+    const customBadge = u.customPermissions
+      ? `<span class="badge badge-yellow" style="font-size:10px;margin-left:4px" title="Індивідуальні права">⚙️ кастом</span>`
+      : '';
     return `<tr>
       <td>${u.id}</td>
       <td style="font-weight:600">${u.name}</td>
       <td><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)">${u.login}</code></td>
-      <td><span class="badge ${r.color}">${r.label}</span></td>
+      <td><span class="badge ${r.color}">${r.label}</span>${customBadge}</td>
       <td>${u.email}</td>
       <td>${u.active?`<span class="badge badge-green">Активний</span>`:`<span class="badge badge-red">Заблокований</span>`}</td>
       <td><div class="actions-cell">
@@ -1676,17 +1697,80 @@ function deleteReading(meterId,m,y){
   showNotif('Показання видалено','error');
 }
 
+const ALL_PERMISSIONS = [
+  { key:'dashboard',      label:'📊 Панель керування',        group:'Загальне' },
+  { key:'electric',       label:'⚡ Перегляд електроенергії',  group:'Електроенергія' },
+  { key:'water',          label:'💧 Перегляд холодної води',   group:'Вода' },
+  { key:'add_reading',    label:'✏️ Введення показань',        group:'Дії' },
+  { key:'delete_reading', label:'🗑 Видалення показань',       group:'Дії' },
+  { key:'reports',        label:'📋 Перегляд звітів',          group:'Звіти' },
+  { key:'edit_tariff',    label:'💰 Фінансові дані та тарифи', group:'Фінанси' },
+  { key:'meters',         label:'🔧 Керування лічильниками',   group:'Адміністрування' },
+  { key:'users',          label:'👥 Керування користувачами',  group:'Адміністрування' },
+];
+
 function openUserModal(id){
-  const user=id?USERS.find(u=>u.id===id):null;
-  const roleOptions=Object.entries(ROLES).map(([k,v])=>`<option value="${k}"${user?.role===k?' selected':''}>${v.label}</option>`).join('');
-  document.getElementById('modal-title').textContent=user?'Редагувати користувача':'Новий користувач';
-  document.getElementById('modal-body').innerHTML=`
+  const user = id ? USERS.find(u=>u.id===id) : null;
+  const roleOptions = Object.entries(ROLES).map(([k,v])=>
+    `<option value="${k}"${user?.role===k?' selected':''}>${v.label}</option>`
+  ).join('');
+
+  // Get current effective permissions for this user
+  const effectivePerms = user?.customPermissions || ROLES[user?.role||'electrician'].permissions;
+
+  // Build permission groups
+  const groups = {};
+  ALL_PERMISSIONS.forEach(p=>{ if(!groups[p.group]) groups[p.group]=[]; groups[p.group].push(p); });
+
+  const permHTML = Object.entries(groups).map(([group, perms])=>`
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">${group}</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${perms.map(p=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border-radius:6px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="perm-${p.key}" ${effectivePerms.includes(p.key)?'checked':''}
+              style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+            ${p.label}
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('modal-title').textContent = user ? 'Редагувати користувача' : 'Новий користувач';
+  document.getElementById('modal-body').innerHTML = `
     <div class="modal-grid">
-      <div style="grid-column:1/-1"><label class="form-label">Повне ім'я</label><input class="form-input" id="u-name" value="${user?.name||''}" placeholder="Прізвище І.П."></div>
-      <div><label class="form-label">Логін</label><input class="form-input" id="u-login" value="${user?.login||''}" placeholder="login"></div>
-      <div><label class="form-label">Пароль${user?' (залиште порожнім, щоб не змінювати)':''}</label><input class="form-input" type="password" id="u-pass" placeholder="••••••••"></div>
-      <div><label class="form-label">Роль</label><select class="form-select" id="u-role">${roleOptions}</select></div>
-      <div><label class="form-label">Email</label><input class="form-input" type="email" id="u-email" value="${user?.email||''}" placeholder="email@domain.ua"></div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Повне ім'я</label>
+        <input class="form-input" id="u-name" value="${user?.name||''}" placeholder="Прізвище І.П.">
+      </div>
+      <div>
+        <label class="form-label">Логін</label>
+        <input class="form-input" id="u-login" value="${user?.login||''}" placeholder="login">
+      </div>
+      <div>
+        <label class="form-label">Пароль${user?' (порожнє = не змінювати)':''}</label>
+        <input class="form-input" type="password" id="u-pass" placeholder="••••••••">
+      </div>
+      <div>
+        <label class="form-label">Роль (шаблон прав)</label>
+        <select class="form-select" id="u-role" onchange="applyRoleTemplate(this.value)">${roleOptions}</select>
+      </div>
+      <div>
+        <label class="form-label">Email</label>
+        <input class="form-input" type="email" id="u-email" value="${user?.email||''}" placeholder="email@domain.ua">
+      </div>
+    </div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:700">🔐 Права доступу</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-ghost" onclick="applyRoleTemplate(document.getElementById('u-role').value)">↺ За роллю</button>
+          <button class="btn btn-sm btn-ghost" onclick="toggleAllPerms(true)">Всі</button>
+          <button class="btn btn-sm btn-ghost" onclick="toggleAllPerms(false)">Жодного</button>
+        </div>
+      </div>
+      ${permHTML}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>
@@ -1695,21 +1779,46 @@ function openUserModal(id){
   showModal();
 }
 
+function applyRoleTemplate(role){
+  const perms = ROLES[role]?.permissions || [];
+  ALL_PERMISSIONS.forEach(p=>{
+    const cb = document.getElementById('perm-'+p.key);
+    if(cb) cb.checked = perms.includes(p.key);
+  });
+}
+
+function toggleAllPerms(state){
+  ALL_PERMISSIONS.forEach(p=>{ const cb=document.getElementById('perm-'+p.key); if(cb) cb.checked=state; });
+}
+
 function saveUser(id){
-  const name=document.getElementById('u-name').value.trim();
-  const login=document.getElementById('u-login').value.trim();
-  const pass=document.getElementById('u-pass').value.trim();
-  const role=document.getElementById('u-role').value;
-  const email=document.getElementById('u-email').value.trim();
+  const name  = document.getElementById('u-name').value.trim();
+  const login = document.getElementById('u-login').value.trim();
+  const pass  = document.getElementById('u-pass').value.trim();
+  const role  = document.getElementById('u-role').value;
+  const email = document.getElementById('u-email').value.trim();
   if(!name||!login){ showNotif("Заповніть всі обов'язкові поля",'error'); return; }
+
+  // Collect checked permissions
+  const customPermissions = ALL_PERMISSIONS.filter(p=>{
+    const cb=document.getElementById('perm-'+p.key); return cb&&cb.checked;
+  }).map(p=>p.key);
+
+  // Check if custom perms differ from role defaults
+  const rolePerms = ROLES[role]?.permissions||[];
+  const isCustom = JSON.stringify([...customPermissions].sort()) !== JSON.stringify([...rolePerms].sort());
+
   if(id){
     const u=USERS.find(x=>x.id===id);
-    if(u){ u.name=name; u.login=login; u.role=role; u.email=email; }
+    if(u){
+      u.name=name; u.login=login; u.role=role; u.email=email;
+      u.customPermissions = isCustom ? customPermissions : null;
+    }
     if(pass) setPassword(login, pass);
   } else {
     if(!pass){ showNotif('Введіть пароль','error'); return; }
     const newId=Math.max(...USERS.map(u=>u.id))+1;
-    USERS.push({ id:newId, login, name, role, email, active:true });
+    USERS.push({ id:newId, login, name, role, email, active:true, customPermissions: isCustom?customPermissions:null });
     setPassword(login, pass);
   }
   closeModal(); renderUsers();
