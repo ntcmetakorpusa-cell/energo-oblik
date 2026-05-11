@@ -1618,15 +1618,40 @@ function openAddReadingModal(type, meterId){
     <div class="modal-grid">
       <div style="grid-column:1/-1">
         <label class="form-label">Лічильник</label>
-        <select class="form-select" id="r-meter" onchange="updatePrevReading('${type}',${m},${y})">
-          ${options}
-        </select>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="form-select" id="r-meter" onchange="updatePrevReading('${type}',${m},${y})" style="flex:1">
+            ${options}
+          </select>
+          ${can('meters') ? `<button class="btn btn-sm btn-ghost" onclick="inlineEditMeter()" title="Редагувати назву лічильника" style="flex-shrink:0;padding:8px 10px">✏️</button>` : ''}
+        </div>
+        <!-- Inline edit panel (hidden by default) -->
+        <div id="inline-meter-edit" style="display:none;margin-top:10px;padding:12px;background:var(--bg3);border:1px solid var(--accent2);border-radius:var(--radius)">
+          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">✏️ Редагування лічильника</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div>
+              <label class="form-label">Номер лічильника</label>
+              <input class="form-input" id="inline-meter-number" placeholder="ЕЛ-001" style="font-size:13px">
+            </div>
+            <div>
+              <label class="form-label">Серійний номер</label>
+              <input class="form-input" id="inline-meter-serial" placeholder="SN000" style="font-size:13px">
+            </div>
+          </div>
+          <div style="margin-bottom:8px">
+            <label class="form-label">Назва приміщення</label>
+            <input class="form-input" id="inline-meter-room" placeholder="Приміщення / Корпус" style="font-size:13px">
+          </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end">
+            <button class="btn btn-sm btn-ghost" onclick="cancelInlineEdit()">Скасувати</button>
+            <button class="btn btn-sm btn-accent" onclick="saveInlineMeter('${type}',${m},${y})">💾 Зберегти назву</button>
+          </div>
+        </div>
       </div>
       ${block.html}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>
-      <button class="btn btn-accent" onclick="saveReading('${type}',${m},${y})">💾 Зберегти</button>
+      <button class="btn btn-accent" onclick="saveReading('${type}',${m},${y})">💾 Зберегти показання</button>
     </div>`;
   showModal();
   setTimeout(calcDiff, 50);
@@ -1646,7 +1671,54 @@ function updatePrevReading(type,m,y){
   }
   const currEl=document.getElementById('r-curr');
   if(currEl) currEl.value=r?.current||'';
+  // close inline edit if open
+  const ep=document.getElementById('inline-meter-edit');
+  if(ep) ep.style.display='none';
   calcDiff();
+}
+
+function inlineEditMeter(){
+  const meterId = parseInt(document.getElementById('r-meter').value);
+  const meter = METERS.find(x=>x.id===meterId);
+  if(!meter) return;
+  const panel = document.getElementById('inline-meter-edit');
+  if(!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  if(isOpen){ panel.style.display='none'; return; }
+  document.getElementById('inline-meter-number').value = meter.number;
+  document.getElementById('inline-meter-serial').value = meter.serial||'';
+  document.getElementById('inline-meter-room').value   = meter.room;
+  panel.style.display = 'block';
+  document.getElementById('inline-meter-room').focus();
+}
+
+function cancelInlineEdit(){
+  const panel = document.getElementById('inline-meter-edit');
+  if(panel) panel.style.display='none';
+}
+
+function saveInlineMeter(type, m, y){
+  const meterId  = parseInt(document.getElementById('r-meter').value);
+  const meter    = METERS.find(x=>x.id===meterId);
+  if(!meter) return;
+  const number = document.getElementById('inline-meter-number').value.trim();
+  const serial = document.getElementById('inline-meter-serial').value.trim();
+  const room   = document.getElementById('inline-meter-room').value.trim();
+  if(!number||!room){ showNotif('Заповніть номер та приміщення','error'); return; }
+  meter.number = number;
+  meter.serial = serial;
+  meter.room   = room;
+  // Refresh the dropdown option text
+  const sel = document.getElementById('r-meter');
+  if(sel){
+    const opt = sel.querySelector(`option[value="${meterId}"]`);
+    if(opt){
+      const r = getReading(meterId,m,y);
+      opt.textContent = `${number} — ${room.substring(0,28)}${r?' ✓':''}`;
+    }
+  }
+  cancelInlineEdit();
+  showNotif(`Лічильник "${number}" оновлено ✓`, 'success');
 }
 
 function calcDiff(){
