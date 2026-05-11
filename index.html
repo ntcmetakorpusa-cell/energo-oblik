@@ -2348,7 +2348,8 @@ function saveTariffModal(){
   if(document.getElementById('page-reports')?.classList.contains('active')) renderReports();
   showNotif('Тарифи збережено ✓ (тариф: ' + elRate.toFixed(2) + ' грн, втрати: ' + loss.toFixed(1) + '%, ПДВ: ' + vat.toFixed(0) + '%)', 'success');
 }
-</script>
+
+// ===== GOOGLE SHEETS MODAL =====
 function openSheetsModal(){
   const current = getSheetsUrl();
   document.getElementById('modal-title').textContent='📊 Підключення Google Sheets';
