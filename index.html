@@ -832,37 +832,57 @@ function isFirstRun() {
 
 // Build USERS array with passwords from localStorage
 function buildUsersArray() {
-  const stored = JSON.parse(localStorage.getItem('energo_users_v1') || 'null') || DEFAULT_USERS.map(u=>({...u}));
+  const USERS_KEY = 'energo_users_data_v1';
+  const stored = JSON.parse(localStorage.getItem(USERS_KEY) || 'null') || DEFAULT_USERS.map(u=>({...u}));
   const passwords = loadPasswords();
   return stored.map(u => ({ ...u, password: passwords[u.login] || null }));
 }
 
 let USERS = buildUsersArray();
 
-let METERS = [];
-// Generate 17 electric meters
+// ===== PERSISTENT STORAGE for METERS and READINGS =====
+const METERS_KEY   = 'energo_meters_v1';
+const READINGS_KEY = 'energo_readings_v1';
+const COUNTER_KEY  = 'energo_counter_v1';
+
+const DEFAULT_METERS = [];
 for(let i=1;i<=17;i++){
-  METERS.push({ id:i, number:`ЕЛ-${String(i).padStart(3,'0')}`, type:'electric', room:`Приміщення ${i} / Корпус ${i<=9?'А':'Б'}`, status:'active', serial:`SN${100+i}` });
+  DEFAULT_METERS.push({ id:i, number:`ЕЛ-${String(i).padStart(3,'0')}`, type:'electric', room:`Приміщення ${i} / Корпус ${i<=9?'А':'Б'}`, status:'active', serial:`SN${100+i}` });
 }
-// Generate 7 water meters
 for(let i=1;i<=7;i++){
-  METERS.push({ id:100+i, number:`ВД-${String(i).padStart(3,'0')}`, type:'water', room:`Приміщення ${i} / Поверх ${Math.ceil(i/2)}`, status:'active', serial:`WN${200+i}` });
+  DEFAULT_METERS.push({ id:100+i, number:`ВД-${String(i).padStart(3,'0')}`, type:'water', room:`Приміщення ${i} / Поверх ${Math.ceil(i/2)}`, status:'active', serial:`WN${200+i}` });
 }
 
-// Generate readings for last 4 months
-let READINGS = [];
-let ridCounter = 1;
-const now = new Date();
-for(let m=0; m<4; m++){
-  let d = new Date(now.getFullYear(), now.getMonth()-m, 1);
-  let month = d.getMonth()+1, year = d.getFullYear();
-  METERS.forEach(meter=>{
-    let base = meter.type==='electric' ? 50000+meter.id*1000 : 2000+meter.id*100;
-    let prev = base + m*800;
-    let curr = prev + Math.floor(Math.random()*600+200);
-    READINGS.push({ id:ridCounter++, meterId:meter.id, month, year, current:curr, previous:prev, note:'', enteredBy:2, enteredAt:'2024-01-15' });
-  });
+function loadMeters(){
+  try {
+    const saved = localStorage.getItem(METERS_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch(e){ return null; }
 }
+
+function saveMeters(){
+  localStorage.setItem(METERS_KEY, JSON.stringify(METERS));
+}
+
+function loadReadings(){
+  try {
+    const saved = localStorage.getItem(READINGS_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch(e){ return null; }
+}
+
+function saveReadings(){
+  localStorage.setItem(READINGS_KEY, JSON.stringify(READINGS));
+  localStorage.setItem(COUNTER_KEY, String(ridCounter));
+}
+
+// Load or initialize METERS
+let METERS = loadMeters() || DEFAULT_METERS.map(m=>({...m}));
+
+// Load or initialize READINGS (no demo data — start empty)
+let READINGS = loadReadings() || [];
+let ridCounter = parseInt(localStorage.getItem(COUNTER_KEY)||'1');
+const now = new Date();
 
 // Load tariffs from localStorage (persist across sessions)
 const TARIFFS_KEY = 'energo_tariffs_v1';
@@ -1556,10 +1576,18 @@ function renderUsers(){
     </div>`;
 }
 
+const USERS_KEY = 'energo_users_data_v1';
+function saveUsers(){
+  // Save without passwords (passwords stored separately)
+  const usersData = USERS.map(u=>({ id:u.id, login:u.login, name:u.name, role:u.role, email:u.email, active:u.active, customPermissions:u.customPermissions||null }));
+  localStorage.setItem(USERS_KEY, JSON.stringify(usersData));
+}
+
 function toggleUser(id){
   const u=USERS.find(x=>x.id===id);
   if(!u)return;
   u.active=!u.active;
+  saveUsers(); // 💾 persist
   renderUsers();
   showNotif(u.active?'Користувача активовано':'Користувача заблоковано', u.active?'success':'error');
 }
@@ -1797,6 +1825,7 @@ function saveInlineMeter(type, m, y){
   meter.number = number;
   meter.serial = serial;
   meter.room   = room;
+  saveMeters(); // 💾 persist
   // Refresh the dropdown option text
   const sel = document.getElementById('r-meter');
   if(sel){
@@ -1837,13 +1866,13 @@ function saveReading(type,m,y){
   if(today.getDate() >= 22){
     let nm = m+1, ny = y;
     if(nm > 12){ nm = 1; ny++; }
-    // Remove old prefill for next month if exists
     READINGS = READINGS.filter(r=>!(r.meterId===meterId&&r.month===nm&&r.year===ny&&r.isPrefill));
-    // Only create prefill if no real reading for next month yet
     if(!getReading(meterId, nm, ny)){
       READINGS.push({ id:ridCounter++, meterId, month:nm, year:ny, current:null, previous:curr, note:'', enteredBy:currentUser.id, enteredAt:date, isPrefill:true, prefillFrom:`${MONTHS[m-1]} ${y}` });
     }
   }
+
+  saveReadings(); // 💾 persist
 
   // Sync to Google Sheets
   const payload = {
@@ -1871,7 +1900,8 @@ function saveReading(type,m,y){
 
 function deleteReading(meterId,m,y){
   if(!confirm('Видалити показання? Цю дію не можна скасувати.')) return;
-  READINGS=READINGS.filter(r=>!(r.meterId===meterId&&r.month===m&&r.year===y));
+  READINGS=READINGS.filter(r=>!(r.meterId===meterId&&r.month===m&&r.year===y&&!r.isPrefill));
+  saveReadings(); // 💾 persist
   renderElectric(); renderWater(); renderDashboard();
   showNotif('Показання видалено','error');
 }
@@ -2001,6 +2031,7 @@ function saveUser(id){
     setPassword(login, pass);
   }
   closeModal(); renderUsers();
+  saveUsers(); // 💾 persist
   showNotif(id?'Користувача оновлено':'Користувача додано','success');
   buildSidebar(); buildUserTiles();
 }
@@ -2082,8 +2113,11 @@ function saveMeter(id, returnPage){
     if(!isNaN(initVal) && initVal>=0){
       const now2 = new Date();
       READINGS.push({ id:ridCounter++, meterId:newMeterId, month:now2.getMonth()+1, year:now2.getFullYear(), current:initVal, previous:0, note:'Початкове показання', enteredBy:currentUser.id, enteredAt:now2.toISOString().split('T')[0] });
+      saveReadings();
     }
   }
+
+  saveMeters(); // 💾 persist
 
   closeModal();
   showNotif(id?`Лічильник "${number}" оновлено`:`Лічильник "${number}" додано ✓`,'success');
