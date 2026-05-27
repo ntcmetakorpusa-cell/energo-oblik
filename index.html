@@ -536,6 +536,9 @@
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -654,6 +657,16 @@
         </div>
       </div>
       <div id="sidebar-footer-extra"></div>
+      <div id="firebase-status-btn" style="margin-bottom:8px;display:none">
+        <button onclick="openFirebaseModal()" id="fb-btn" style="width:100%;padding:8px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s;border:1px solid var(--border);background:var(--bg3);color:var(--text2)">
+          🔴 <span id="fb-btn-label">Синхронізація: вимкнена</span>
+        </button>
+      </div>
+      <div id="sheets-sync-btn" style="margin-bottom:8px;display:none">
+        <button onclick="pullDataFromSheets(true)" id="sync-btn" style="width:100%;padding:8px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--green2);background:var(--green-bg);color:var(--green)">
+          🔄 Синхронізувати з Google Sheets
+        </button>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <button onclick="doSwitchUser()" style="
           padding:8px 4px; border-radius:var(--radius); border:1px solid var(--border);
@@ -840,11 +853,7 @@ function buildUsersArray() {
 
 let USERS = buildUsersArray();
 
-// ===== PERSISTENT STORAGE for METERS and READINGS =====
-const METERS_KEY   = 'energo_meters_v1';
-const READINGS_KEY = 'energo_readings_v1';
-const COUNTER_KEY  = 'energo_counter_v1';
-
+// ===== DEFAULT METERS =====
 const DEFAULT_METERS = [];
 for(let i=1;i<=17;i++){
   DEFAULT_METERS.push({ id:i, number:`ЕЛ-${String(i).padStart(3,'0')}`, type:'electric', room:`Приміщення ${i} / Корпус ${i<=9?'А':'Б'}`, status:'active', serial:`SN${100+i}` });
@@ -853,64 +862,251 @@ for(let i=1;i<=7;i++){
   DEFAULT_METERS.push({ id:100+i, number:`ВД-${String(i).padStart(3,'0')}`, type:'water', room:`Приміщення ${i} / Поверх ${Math.ceil(i/2)}`, status:'active', serial:`WN${200+i}` });
 }
 
-function loadMeters(){
+// ===== LOCAL STORAGE KEYS (offline cache) =====
+const METERS_KEY   = 'energo_meters_v1';
+const READINGS_KEY = 'energo_readings_v1';
+const COUNTER_KEY  = 'energo_counter_v1';
+const FB_CFG_KEY   = 'energo_firebase_cfg_v1';
+
+// ===== FIREBASE INTEGRATION =====
+let db = null; // Firebase database reference
+
+function getFirebaseConfig(){
+  try { return JSON.parse(localStorage.getItem(FB_CFG_KEY))||null; } catch(e){ return null; }
+}
+function setFirebaseConfig(cfg){
+  localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg));
+}
+
+function initFirebase(){
+  const cfg = getFirebaseConfig();
+  if(!cfg || !cfg.databaseURL) return false;
   try {
-    const saved = localStorage.getItem(METERS_KEY);
-    return saved ? JSON.parse(saved) : null;
-  } catch(e){ return null; }
+    if(firebase.apps.length === 0){
+      firebase.initializeApp(cfg);
+    }
+    db = firebase.database();
+    setupFirebaseListeners();
+    return true;
+  } catch(e){ console.warn('Firebase init error:', e); db=null; return false; }
+}
+
+function setupFirebaseListeners(){
+  if(!db) return;
+  // Real-time sync: when data changes in Firebase — update local and re-render
+  db.ref('meters').on('value', snap=>{
+    const data = snap.val();
+    if(data){
+      METERS = Array.isArray(data) ? data : Object.values(data);
+      localStorage.setItem(METERS_KEY, JSON.stringify(METERS));
+      if(document.getElementById('page-electric')?.classList.contains('active')) renderElectric();
+      if(document.getElementById('page-water')?.classList.contains('active')) renderWater();
+      if(document.getElementById('page-meters')?.classList.contains('active')) renderMeters();
+    }
+  });
+  db.ref('readings').on('value', snap=>{
+    const data = snap.val();
+    if(data){
+      READINGS = Array.isArray(data) ? data : Object.values(data);
+      // Update ridCounter
+      const maxId = Math.max(0, ...READINGS.map(r=>r.id||0));
+      if(maxId >= ridCounter) ridCounter = maxId+1;
+      localStorage.setItem(READINGS_KEY, JSON.stringify(READINGS));
+      localStorage.setItem(COUNTER_KEY, String(ridCounter));
+      if(document.getElementById('page-electric')?.classList.contains('active')) renderElectric();
+      if(document.getElementById('page-water')?.classList.contains('active')) renderWater();
+      renderDashboard();
+    }
+  });
+  db.ref('tariffs').on('value', snap=>{
+    const data = snap.val();
+    if(data){ Object.assign(TARIFFS, data); localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS)); }
+  });
 }
 
 function saveMeters(){
   localStorage.setItem(METERS_KEY, JSON.stringify(METERS));
-}
-
-function loadReadings(){
-  try {
-    const saved = localStorage.getItem(READINGS_KEY);
-    return saved ? JSON.parse(saved) : null;
-  } catch(e){ return null; }
+  if(db) db.ref('meters').set(METERS).catch(e=>console.warn('FB meters save error',e));
+  pushAllDataToSheets();
 }
 
 function saveReadings(){
   localStorage.setItem(READINGS_KEY, JSON.stringify(READINGS));
   localStorage.setItem(COUNTER_KEY, String(ridCounter));
+  if(db) db.ref('readings').set(READINGS).catch(e=>console.warn('FB readings save error',e));
+  pushAllDataToSheets();
 }
 
-// Load or initialize METERS
-let METERS = loadMeters() || DEFAULT_METERS.map(m=>({...m}));
+function saveTariffs(){
+  localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS));
+  if(db) db.ref('tariffs').set(TARIFFS).catch(e=>console.warn('FB tariffs save error',e));
+  pushAllDataToSheets();
+}
 
-// Load or initialize READINGS (no demo data — start empty)
-let READINGS = loadReadings() || [];
+// ===== INITIALIZE DATA =====
+let METERS   = JSON.parse(localStorage.getItem(METERS_KEY)   || 'null') || DEFAULT_METERS.map(m=>({...m}));
+let READINGS = JSON.parse(localStorage.getItem(READINGS_KEY) || 'null') || [];
 let ridCounter = parseInt(localStorage.getItem(COUNTER_KEY)||'1');
 const now = new Date();
 
-// Load tariffs from localStorage (persist across sessions)
+// Tariffs
 const TARIFFS_KEY = 'energo_tariffs_v1';
-function loadTariffs(){
-  try { return JSON.parse(localStorage.getItem(TARIFFS_KEY))||null; } catch(e){ return null; }
-}
+function loadTariffs(){ try{ return JSON.parse(localStorage.getItem(TARIFFS_KEY))||null; }catch(e){return null;} }
 let TARIFFS = loadTariffs() || { electric:4.32, vat:0.2, loss:0.13, water:30.0, waterVat:0.2 };
-if(TARIFFS.loss === undefined) TARIFFS.loss = 0.13;
-if(TARIFFS.water === undefined) TARIFFS.water = 30.0;
-if(TARIFFS.waterVat === undefined) TARIFFS.waterVat = 0.2;
-function saveTariffs(){ localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS)); }
+if(TARIFFS.loss===undefined) TARIFFS.loss=0.13;
+if(TARIFFS.water===undefined) TARIFFS.water=30.0;
+if(TARIFFS.waterVat===undefined) TARIFFS.waterVat=0.2;
+
+// Try init Firebase on load
+window.addEventListener('DOMContentLoaded', ()=>{ initFirebase(); });
 
 // ===== GOOGLE SHEETS SYNC =====
 const SHEETS_KEY = 'energo_sheets_url_v1';
 function getSheetsUrl(){ return localStorage.getItem(SHEETS_KEY)||''; }
 function setSheetsUrl(url){ localStorage.setItem(SHEETS_KEY, url); }
 
+let _syncInProgress = false;
+
+// === WRITE to Sheets: save everything ===
 async function syncToSheets(payload){
   const url = getSheetsUrl();
-  if(!url) return; // silently skip if not configured
+  if(!url) return;
   try {
+    // Also save full snapshot for cross-device sync
     await fetch(url, {
-      method:'POST',
-      mode:'no-cors', // Google Apps Script requires no-cors
+      method:'POST', mode:'no-cors',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
     });
-  } catch(e){ console.warn('Sheets sync error:', e); }
+  } catch(e){ console.warn('Sheets write error:', e); }
+}
+
+async function pushAllDataToSheets(){
+  const url = getSheetsUrl();
+  if(!url) return false;
+  try {
+    await fetch(url, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:'saveAll',
+        meters:   METERS,
+        readings: READINGS,
+        counter:  ridCounter,
+        tariffs:  TARIFFS
+      })
+    });
+    localStorage.setItem('energo_last_push', Date.now().toString());
+    return true;
+  } catch(e){ console.warn('Sheets pushAll error:', e); return false; }
+}
+
+// === READ from Sheets using JSONP (bypasses CORS) ===
+async function pullDataFromSheets(showStatus){
+  const url = getSheetsUrl();
+  if(!url){ if(showStatus) showNotif('Google Sheets не підключено','error'); return false; }
+  if(_syncInProgress) return false;
+  _syncInProgress = true;
+  if(showStatus) showNotif('⏳ Завантаження даних...','success');
+
+  return new Promise((resolve)=>{
+    const cbName = '_sheetsCb_' + Date.now();
+    const script = document.createElement('script');
+    const timeout = setTimeout(()=>{
+      cleanup();
+      _syncInProgress = false;
+      // Fallback: try plain fetch
+      fetchFallback(showStatus).then(resolve);
+    }, 8000);
+
+    function cleanup(){
+      clearTimeout(timeout);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = function(data){
+      cleanup();
+      _syncInProgress = false;
+      applySheetData(data, showStatus);
+      resolve(true);
+    };
+
+    script.src = url + '?action=getData&callback=' + cbName + '&t=' + Date.now();
+    script.onerror = ()=>{
+      cleanup();
+      _syncInProgress = false;
+      fetchFallback(showStatus).then(resolve);
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// Fallback: regular fetch (works on some configs)
+async function fetchFallback(showStatus){
+  const url = getSheetsUrl();
+  try {
+    const res = await fetch(url + '?action=getData&t=' + Date.now(), {
+      credentials: 'omit'
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    applySheetData(data, showStatus);
+    return true;
+  } catch(e){
+    console.warn('Fallback fetch error:', e);
+    if(showStatus) showNotif('❌ Не вдалось завантажити дані. Спробуйте ще раз.','error');
+    return false;
+  }
+}
+
+function applySheetData(data, showStatus){
+  if(!data || data.status==='error') return;
+  let changed = false;
+  if(data.meters && Array.isArray(data.meters) && data.meters.length > 0){
+    METERS = data.meters;
+    localStorage.setItem(METERS_KEY, JSON.stringify(METERS));
+    changed = true;
+  }
+  if(data.readings && Array.isArray(data.readings)){
+    READINGS = data.readings;
+    if(data.counter) ridCounter = Number(data.counter);
+    localStorage.setItem(READINGS_KEY, JSON.stringify(READINGS));
+    localStorage.setItem(COUNTER_KEY, String(ridCounter));
+    changed = true;
+  }
+  if(data.tariffs && Object.keys(data.tariffs).length > 0){
+    Object.assign(TARIFFS, data.tariffs);
+    localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS));
+  }
+  if(changed){
+    const ap = document.querySelector('.page.active')?.id;
+    if(ap==='page-electric') renderElectric();
+    else if(ap==='page-water') renderWater();
+    else if(ap==='page-reports') renderReports();
+    else if(ap==='page-meters') renderMeters();
+    renderDashboard();
+  }
+  if(showStatus){
+    showNotif(changed ? '✅ Дані синхронізовані з Google Sheets' : '⚠️ Дані в Sheets порожні — спочатку збережіть показання на головному пристрої', changed?'success':'error');
+  }
+}
+
+// Smart sync on start: if has local data → push; if no local data → pull
+function autoSyncOnStart(){
+  if(!getSheetsUrl()) return;
+  const hasLocalData = READINGS.filter(r=>!r.isPrefill).length > 0;
+  setTimeout(async ()=>{
+    if(hasLocalData){
+      // Push local data to Sheets (in case another device needs it)
+      await pushAllDataToSheets();
+      console.log('Auto-pushed local data to Sheets');
+    } else {
+      // Pull from Sheets (this device has no data)
+      await pullDataFromSheets(true);
+      console.log('Auto-pulled data from Sheets');
+    }
+  }, 1000);
 }
 
 let currentUser = null;
@@ -1046,8 +1242,19 @@ function initApp(){
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const duc=document.getElementById('drawer-user-card');
   if(duc) duc.innerHTML=`<div style="width:32px;height:32px;border-radius:50%;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${r.avatar}</div><div><div style="font-size:12px;font-weight:600">${currentUser.name}</div><div style="font-size:10px;color:var(--text3)">${r.label}</div></div>`;
-  // Sheets button for admin only
-  const extra = document.getElementById('sidebar-footer-extra');
+  // Firebase status button for admin
+  const fbBtnWrap = document.getElementById('firebase-status-btn');
+  if(fbBtnWrap){
+    if(can('edit_tariff')){
+      fbBtnWrap.style.display='block';
+      updateFirebaseStatusBtn();
+    } else { fbBtnWrap.style.display='none'; }
+  }
+  // Google Sheets sync button for admin
+  const sheetsSyncBtn = document.getElementById('sheets-sync-btn');
+  if(sheetsSyncBtn){
+    sheetsSyncBtn.style.display = (can('edit_tariff') && getSheetsUrl()) ? 'block' : 'none';
+  }
   if(extra){
     if(can('edit_tariff')){
       const hasUrl = !!getSheetsUrl();
@@ -1062,6 +1269,7 @@ function initApp(){
   buildSidebar();
   populateSelects();
   navigateTo('dashboard');
+  autoSyncOnStart(); // pull latest from Sheets if configured
 }
 
 function buildSidebar(){
@@ -2564,7 +2772,93 @@ function saveWaterTariff(){
   showNotif('Тариф води збережено: ' + rate.toFixed(2) + ' грн/м³, ПДВ ' + vat.toFixed(0) + '%', 'success');
 }
 
-// ===== GOOGLE SHEETS MODAL =====
+// ===== FIREBASE MODAL =====
+function updateFirebaseStatusBtn(){
+  const btn = document.getElementById('fb-btn');
+  const lbl = document.getElementById('fb-btn-label');
+  if(!btn||!lbl) return;
+  if(db){
+    btn.style.background='var(--green-bg)'; btn.style.color='var(--green)'; btn.style.borderColor='var(--green2)';
+    lbl.textContent='🟢 Синхронізація: увімкнена';
+  } else if(getFirebaseConfig()){
+    btn.style.background='var(--yellow-bg)'; btn.style.color='var(--yellow)'; btn.style.borderColor='rgba(210,153,34,.4)';
+    lbl.textContent='🟡 Синхронізація: помилка';
+  } else {
+    btn.style.background='var(--bg3)'; btn.style.color='var(--text2)'; btn.style.borderColor='var(--border)';
+    lbl.textContent='🔴 Синхронізація: вимкнена';
+  }
+}
+
+function openFirebaseModal(){
+  const cfg = getFirebaseConfig()||{};
+  document.getElementById('modal-title').textContent = '🔥 Синхронізація між пристроями';
+  const body = document.getElementById('modal-body');
+  body.innerHTML='';
+
+  // Status
+  const statusEl = document.createElement('div');
+  statusEl.style.cssText = `background:${db?'var(--green-bg)':'var(--red-bg)'};border:1px solid ${db?'var(--green2)':'var(--red2)'};border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:13px;color:${db?'var(--green)':'var(--red)'};font-weight:600`;
+  statusEl.textContent = db ? '✅ Firebase підключено — дані синхронізуються на всіх пристроях в реальному часі!' : '❌ Firebase не підключено — дані зберігаються тільки в цьому браузері';
+  body.appendChild(statusEl);
+
+  // Info
+  const info = document.createElement('div');
+  info.style.cssText = 'background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8';
+  info.innerHTML = '<strong style="color:var(--text)">📋 Як налаштувати Firebase (безкоштовно):</strong><br>'+
+    '1. Відкрийте <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a><br>'+
+    '2. Натисніть <strong>"Додати проєкт"</strong> → назва: ЕнергоОблік → Створити<br>'+
+    '3. Зліва натисніть <strong>Realtime Database</strong> → Створити базу даних → Тестовий режим → OK<br>'+
+    '4. Натисніть ⚙️ → <strong>Налаштування проєкту</strong> → прокрутіть вниз → Ваші програми → &lt;/&gt; (Веб)<br>'+
+    '5. Зареєструйте програму → скопіюйте <strong>firebaseConfig</strong><br>'+
+    '6. Вставте дані нижче та натисніть Зберегти';
+  body.appendChild(info);
+
+  // Fields
+  const fields = [
+    {id:'fb-apiKey',      label:'apiKey',         val:cfg.apiKey||'',         ph:'AIzaSy...'},
+    {id:'fb-authDomain',  label:'authDomain',      val:cfg.authDomain||'',     ph:'your-app.firebaseapp.com'},
+    {id:'fb-dbUrl',       label:'databaseURL',     val:cfg.databaseURL||'',    ph:'https://your-app-default-rtdb.firebaseio.com'},
+    {id:'fb-projectId',   label:'projectId',       val:cfg.projectId||'',      ph:'your-app-12345'},
+  ];
+  const grid = document.createElement('div');
+  grid.style.cssText='display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:16px';
+  fields.forEach(f=>{
+    const d=document.createElement('div');
+    d.innerHTML=`<label class="form-label">${f.label}</label><input class="form-input" id="${f.id}" value="${f.val}" placeholder="${f.ph}" style="font-size:12px;font-family:monospace">`;
+    grid.appendChild(d);
+  });
+  body.appendChild(grid);
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.className='modal-footer';
+  if(db||cfg.apiKey){
+    const discBtn=document.createElement('button');
+    discBtn.className='btn btn-danger'; discBtn.textContent='🗑 Відключити';
+    discBtn.onclick=()=>{ if(!confirm('Відключити синхронізацію?')) return; localStorage.removeItem(FB_CFG_KEY); db=null; closeModal(); updateFirebaseStatusBtn(); showNotif('Синхронізацію відключено. Перезавантажте сторінку.','error'); };
+    footer.appendChild(discBtn);
+  }
+  const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Скасувати'; cancel.onclick=closeModal;
+  const save=document.createElement('button'); save.className='btn btn-accent'; save.textContent='🔥 Підключити та синхронізувати'; save.onclick=saveFirebaseConfig;
+  footer.appendChild(cancel); footer.appendChild(save);
+  body.appendChild(footer);
+  showModal();
+}
+
+function saveFirebaseConfig(){
+  const apiKey    = document.getElementById('fb-apiKey').value.trim();
+  const authDomain= document.getElementById('fb-authDomain').value.trim();
+  const databaseURL=document.getElementById('fb-dbUrl').value.trim();
+  const projectId = document.getElementById('fb-projectId').value.trim();
+  if(!apiKey||!databaseURL){ showNotif('Заповніть apiKey та databaseURL','error'); return; }
+  const cfg = { apiKey, authDomain, databaseURL, projectId };
+  setFirebaseConfig(cfg);
+  closeModal();
+  showNotif('Firebase налаштовано! Підключаємось...','success');
+  // Reload to reinit Firebase cleanly
+  setTimeout(()=>location.reload(), 1000);
+}
+
 function openSheetsModal(){
   const current = getSheetsUrl();
   document.getElementById('modal-title').textContent = '📊 Підключення Google Sheets';
@@ -2638,8 +2932,26 @@ function saveSheetsUrl(){
   }
   setSheetsUrl(val);
   closeModal();
-  initApp(); // refresh sidebar button state
-  showNotif(val?'Google Sheets підключено ✓':'URL видалено','success');
+  const sheetsSyncBtn = document.getElementById('sheets-sync-btn');
+  if(sheetsSyncBtn) sheetsSyncBtn.style.display = (can('edit_tariff') && val) ? 'block' : 'none';
+  initApp();
+  if(val){
+    const hasLocalData = READINGS.filter(r=>!r.isPrefill).length > 0;
+    if(hasLocalData){
+      // Device 1: has data — push to Sheets first, then confirm
+      showNotif('📤 Відправляємо ваші дані в Google Sheets...','success');
+      setTimeout(async()=>{
+        const ok = await pushAllDataToSheets();
+        showNotif(ok ? '✅ Дані відправлено в Google Sheets! Тепер інші пристрої можуть синхронізуватись.' : '⚠️ Помилка відправки. Перевірте URL.', ok?'success':'error');
+      }, 500);
+    } else {
+      // Device 2: no data — pull from Sheets
+      showNotif('📥 Завантажуємо дані з Google Sheets...','success');
+      setTimeout(()=> pullDataFromSheets(true), 600);
+    }
+  } else {
+    showNotif('URL видалено','success');
+  }
 }
 function clearSheetsUrl(){
   if(!confirm('Відключити Google Sheets синхронізацію?')) return;
