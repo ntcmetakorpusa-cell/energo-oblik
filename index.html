@@ -561,6 +561,21 @@
   <div class="drawer-nav" id="drawer-nav"></div>
   <div class="drawer-footer">
     <div id="drawer-user-card" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px"></div>
+    <!-- Google Sheets sync (admin only, shown via JS) -->
+    <div id="drawer-sheets-section" style="display:none;margin-bottom:8px">
+      <button onclick="openSheetsModal();closeDrawer();" id="drawer-sheets-btn" style="width:100%;padding:9px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)">
+        📊 Google Sheets
+      </button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button onclick="forcePushToSheets();closeDrawer();" style="padding:9px;border-radius:var(--radius);border:1px solid var(--accent2);background:rgba(31,111,235,.15);color:var(--accent);font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+          📤 Відправити
+        </button>
+        <button onclick="pullDataFromSheets(true);closeDrawer();" style="padding:9px;border-radius:var(--radius);border:1px solid var(--green2);background:var(--green-bg);color:var(--green);font-family:'Manrope',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+          📥 Отримати
+        </button>
+      </div>
+      <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:4px">📤 цей пристрій → Sheets &nbsp;|&nbsp; 📥 Sheets → цей пристрій</div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
       <button onclick="doSwitchUser();closeDrawer()" style="padding:10px 4px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer">🔄 Змінити</button>
       <button onclick="doLogout()" style="padding:10px 4px;border-radius:var(--radius);border:1px solid var(--red2);background:var(--red-bg);color:var(--red);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer">🚪 Вийти</button>
@@ -903,32 +918,58 @@ function setSheetsUrl(url){ localStorage.setItem(SHEETS_KEY, url); }
 let _syncInProgress = false;
 
 // ═══════════════════════════════════════════════════
-// PUSH: відправити дані на Google Sheets
-// Використовує text/plain (простий запит, без preflight)
-// без no-cors — щоб тіло не губилось при редиректі
+// PUSH: iframe form submission — єдиний надійний спосіб
+// POST через iframe не має CORS обмежень і виживає
+// при 302 redirect Google Apps Script
 // ═══════════════════════════════════════════════════
+function pushToSheetsViaIframe(url, data){
+  return new Promise((resolve)=>{
+    const id = 'push_' + Date.now();
+    const iframe = document.createElement('iframe');
+    iframe.name = id;
+    iframe.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-9999px';
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = id;
+    form.enctype = 'application/x-www-form-urlencoded';
+    form.style.display = 'none';
+
+    const inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'energo_payload';
+    inp.value = JSON.stringify(data);
+    form.appendChild(inp);
+
+    document.body.appendChild(iframe);
+    document.body.appendChild(form);
+
+    let done = false;
+    const finish = ()=>{
+      if(done) return; done = true;
+      setTimeout(()=>{
+        try{ document.body.removeChild(form); }catch(e){}
+        try{ document.body.removeChild(iframe); }catch(e){}
+      }, 500);
+      resolve(true);
+    };
+
+    iframe.onload = finish;
+    setTimeout(finish, 10000); // timeout 10s
+    form.submit();
+  });
+}
+
 async function pushToSheets(payload){
   const url = getSheetsUrl();
   if(!url) return false;
   try {
-    // text/plain = simple request = немає preflight CORS
-    // без mode:'no-cors' = тіло не губиться при 302 redirect
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
+    await pushToSheetsViaIframe(url, payload);
     return true;
   } catch(e){
-    // Якщо CORS заблокував — fallback з no-cors
-    try {
-      await fetch(url, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-      return true;
-    } catch(e2){ console.warn('Push error:', e2); return false; }
+    console.warn('Push error:', e);
+    return false;
   }
 }
 
@@ -938,12 +979,18 @@ async function syncToSheets(payload){
 }
 
 async function pushAllDataToSheets(){
+  // Include users (structure only, no passwords)
+  const usersForSync = USERS.map(u=>({
+    id:u.id, login:u.login, name:u.name, role:u.role,
+    email:u.email, active:u.active, customPermissions:u.customPermissions||null
+  }));
   const ok = await pushToSheets({
     action:   'saveAll',
     meters:   METERS,
     readings: READINGS,
     counter:  ridCounter,
-    tariffs:  TARIFFS
+    tariffs:  TARIFFS,
+    users:    usersForSync
   });
   if(ok) localStorage.setItem('energo_last_push', Date.now().toString());
   return ok;
@@ -1017,6 +1064,14 @@ function applySheetData(data, showStatus){
   if(data.tariffs && typeof data.tariffs === 'object'){
     Object.assign(TARIFFS, data.tariffs);
     localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS));
+  }
+
+  // Sync users structure (without passwords — they stay in localStorage)
+  if(data.users && Array.isArray(data.users) && data.users.length > 0){
+    const passwords = loadPasswords();
+    USERS = data.users.map(u=>({ ...u, password: passwords[u.login]||null }));
+    localStorage.setItem('energo_users_data_v1', JSON.stringify(data.users));
+    changed = true;
   }
 
   safeRender();
@@ -1198,6 +1253,22 @@ function initApp(){
     // Sync buttons (admin only, only if Sheets connected)
     const sheetsSyncBtn = document.getElementById('sheets-sync-btn');
     if(sheetsSyncBtn) sheetsSyncBtn.style.display = (can('edit_tariff') && getSheetsUrl()) ? 'block' : 'none';
+
+    // Mobile drawer Sheets section (admin only)
+    const drawerSheets = document.getElementById('drawer-sheets-section');
+    if(drawerSheets){
+      if(can('edit_tariff')){
+        drawerSheets.style.display = 'block';
+        const hasUrl = !!getSheetsUrl();
+        const dbtn = document.getElementById('drawer-sheets-btn');
+        if(dbtn){
+          dbtn.style.borderColor = hasUrl ? 'var(--green2)' : 'var(--border)';
+          dbtn.style.background  = hasUrl ? 'var(--green-bg)' : 'var(--bg3)';
+          dbtn.style.color       = hasUrl ? 'var(--green)' : 'var(--text2)';
+          dbtn.innerHTML = hasUrl ? '📊 Google Sheets ✓' : '📊 Підключити Google Sheets';
+        }
+      } else { drawerSheets.style.display = 'none'; }
+    }
 
     buildSidebar();
     populateSelects();
