@@ -1183,34 +1183,44 @@ function can(perm){
 
 // ===== INIT =====
 function initApp(){
-  const r = ROLES[currentUser.role];
-  document.getElementById('user-avatar').textContent=r.avatar;
-  document.getElementById('user-avatar').style.background=r.bg;
-  document.getElementById('user-name-display').textContent=currentUser.name;
-  document.getElementById('user-role-display').textContent=r.label;
-  document.getElementById('dash-date').textContent = new Date().toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const duc=document.getElementById('drawer-user-card');
-  if(duc) duc.innerHTML=`<div style="width:32px;height:32px;border-radius:50%;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${r.avatar}</div><div><div style="font-size:12px;font-weight:600">${currentUser.name}</div><div style="font-size:10px;color:var(--text3)">${r.label}</div></div>`;
-  // Google Sheets sync button for admin
-  const sheetsSyncBtn = document.getElementById('sheets-sync-btn');
-  if(sheetsSyncBtn){
-    sheetsSyncBtn.style.display = (can('edit_tariff') && getSheetsUrl()) ? 'block' : 'none';
+  try {
+    const r = ROLES[currentUser.role];
+    document.getElementById('user-avatar').textContent = r.avatar;
+    document.getElementById('user-avatar').style.background = r.bg;
+    document.getElementById('user-name-display').textContent = currentUser.name;
+    document.getElementById('user-role-display').textContent = r.label;
+    document.getElementById('dash-date').textContent = new Date().toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    const duc = document.getElementById('drawer-user-card');
+    if(duc) duc.innerHTML = `<div style="width:32px;height:32px;border-radius:50%;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${r.avatar}</div><div><div style="font-size:12px;font-weight:600">${currentUser.name}</div><div style="font-size:10px;color:var(--text3)">${r.label}</div></div>`;
+
+    // Google Sheets button (admin only)
+    const extra = document.getElementById('sidebar-footer-extra');
+    if(extra){
+      if(can('edit_tariff')){
+        const hasUrl = !!getSheetsUrl();
+        const btn = document.createElement('button');
+        btn.onclick = openSheetsModal;
+        btn.style.cssText = 'width:100%;margin-bottom:8px;padding:8px;border-radius:var(--radius);border:1px solid '+(hasUrl?'var(--green2)':'var(--border)')+';background:'+(hasUrl?'var(--green-bg)':'var(--bg3)')+';color:'+(hasUrl?'var(--green)':'var(--text2)')+';font-family:Manrope,sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px';
+        btn.innerHTML = '<span>📊</span> '+(hasUrl?'Google Sheets ✓':'Підключити Google Sheets');
+        extra.innerHTML = '';
+        extra.appendChild(btn);
+      } else { extra.innerHTML = ''; }
+    }
+
+    // Sync buttons (admin only, only if Sheets connected)
+    const sheetsSyncBtn = document.getElementById('sheets-sync-btn');
+    if(sheetsSyncBtn) sheetsSyncBtn.style.display = (can('edit_tariff') && getSheetsUrl()) ? 'block' : 'none';
+
+    buildSidebar();
+    populateSelects();
+    navigateTo('dashboard');
+  } catch(e){
+    console.error('initApp error:', e);
+    // Fallback render
+    buildSidebar();
+    navigateTo('dashboard');
   }
-  if(extra){
-    if(can('edit_tariff')){
-      const hasUrl = !!getSheetsUrl();
-      const btn = document.createElement('button');
-      btn.onclick = openSheetsModal;
-      btn.style.cssText = 'width:100%;margin-bottom:8px;padding:8px;border-radius:var(--radius);border:1px solid ' + (hasUrl?'var(--green2)':'var(--border)') + ';background:' + (hasUrl?'var(--green-bg)':'var(--bg3)') + ';color:' + (hasUrl?'var(--green)':'var(--text2)') + ';font-family:Manrope,sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px';
-      btn.innerHTML = '<span>📊</span> ' + (hasUrl ? 'Google Sheets ✓' : 'Підключити Google Sheets');
-      extra.innerHTML = '';
-      extra.appendChild(btn);
-    } else { extra.innerHTML=''; }
-  }
-  buildSidebar();
-  populateSelects();
-  navigateTo('dashboard');
-  autoSyncOnStart(); // pull latest from Sheets if configured
+  // NO auto-sync on start — manual only via buttons
 }
 
 function buildSidebar(){
