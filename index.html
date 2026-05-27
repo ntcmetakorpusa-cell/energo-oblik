@@ -655,9 +655,15 @@
       </div>
       <div id="sidebar-footer-extra"></div>
       <div id="sheets-sync-btn" style="margin-bottom:8px;display:none">
-        <button onclick="pullDataFromSheets(true)" id="sync-btn" style="width:100%;padding:8px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--green2);background:var(--green-bg);color:var(--green)">
-          🔄 Синхронізувати з Google Sheets
-        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
+          <button onclick="forcePushToSheets()" style="padding:7px 4px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;border:1px solid var(--accent2);background:rgba(31,111,235,.15);color:var(--accent)">
+            📤 Відправити
+          </button>
+          <button onclick="pullDataFromSheets(true)" style="padding:7px 4px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;border:1px solid var(--green2);background:var(--green-bg);color:var(--green)">
+            📥 Отримати
+          </button>
+        </div>
+        <div style="font-size:9px;color:var(--text3);text-align:center">📤 = з цього пристрою → Sheets &nbsp;|&nbsp; 📥 = Sheets → цей пристрій</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <button onclick="doSwitchUser()" style="
@@ -990,7 +996,9 @@ async function fetchFallback(showStatus){
 }
 
 function applySheetData(data, showStatus){
-  if(!data || data.status==='error') return;
+  if(!data){ if(showStatus) showNotif('❌ Немає відповіді від Google Sheets','error'); return; }
+  if(data.status==='error'){ if(showStatus) showNotif('❌ Помилка: '+data.message,'error'); return; }
+
   let changed = false;
   if(data.meters && Array.isArray(data.meters) && data.meters.length > 0){
     METERS = data.meters;
@@ -1008,34 +1016,46 @@ function applySheetData(data, showStatus){
     Object.assign(TARIFFS, data.tariffs);
     localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS));
   }
-  if(changed){
+
+  // Always re-render to fix blank page
+  try {
     const ap = document.querySelector('.page.active')?.id;
     if(ap==='page-electric') renderElectric();
     else if(ap==='page-water') renderWater();
     else if(ap==='page-reports') renderReports();
     else if(ap==='page-meters') renderMeters();
+    else navigateTo('dashboard'); // fallback: go to dashboard
     renderDashboard();
-  }
+  } catch(e){ console.warn('Render error after sync:', e); navigateTo('dashboard'); }
+
   if(showStatus){
-    showNotif(changed ? '✅ Дані синхронізовані з Google Sheets' : '⚠️ Дані в Sheets порожні — спочатку збережіть показання на головному пристрої', changed?'success':'error');
+    if(changed){
+      showNotif('✅ Дані завантажено з Google Sheets!', 'success');
+    } else {
+      showNotif('⚠️ Sheets порожній! На головному пристрої натисніть 📤 "Відправити"', 'error');
+    }
   }
 }
 
-// Smart sync on start: if has local data → push; if no local data → pull
+// Push all local data to Sheets (explicit button)
+async function forcePushToSheets(){
+  showNotif('📤 Відправляємо всі дані в Google Sheets...','success');
+  const ok = await pushAllDataToSheets();
+  // pushAllDataToSheets uses no-cors so always returns true
+  showNotif('✅ Дані відправлено! На іншому пристрої натисніть 📥 "Отримати"','success');
+}
+
+// On start: push if has data, pull if empty
 function autoSyncOnStart(){
   if(!getSheetsUrl()) return;
   const hasLocalData = READINGS.filter(r=>!r.isPrefill).length > 0;
   setTimeout(async ()=>{
     if(hasLocalData){
-      // Push local data to Sheets (in case another device needs it)
       await pushAllDataToSheets();
-      console.log('Auto-pushed local data to Sheets');
     } else {
-      // Pull from Sheets (this device has no data)
       await pullDataFromSheets(true);
-      console.log('Auto-pulled data from Sheets');
     }
-  }, 1000);
+  }, 1200);
 }
 
 let currentUser = null;
