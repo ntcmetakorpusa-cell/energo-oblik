@@ -536,9 +536,6 @@
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -657,11 +654,6 @@
         </div>
       </div>
       <div id="sidebar-footer-extra"></div>
-      <div id="firebase-status-btn" style="margin-bottom:8px;display:none">
-        <button onclick="openFirebaseModal()" id="fb-btn" style="width:100%;padding:8px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s;border:1px solid var(--border);background:var(--bg3);color:var(--text2)">
-          🔴 <span id="fb-btn-label">Синхронізація: вимкнена</span>
-        </button>
-      </div>
       <div id="sheets-sync-btn" style="margin-bottom:8px;display:none">
         <button onclick="pullDataFromSheets(true)" id="sync-btn" style="width:100%;padding:8px;border-radius:var(--radius);font-family:'Manrope',sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--green2);background:var(--green-bg);color:var(--green)">
           🔄 Синхронізувати з Google Sheets
@@ -866,80 +858,20 @@ for(let i=1;i<=7;i++){
 const METERS_KEY   = 'energo_meters_v1';
 const READINGS_KEY = 'energo_readings_v1';
 const COUNTER_KEY  = 'energo_counter_v1';
-const FB_CFG_KEY   = 'energo_firebase_cfg_v1';
-
-// ===== FIREBASE INTEGRATION =====
-let db = null; // Firebase database reference
-
-function getFirebaseConfig(){
-  try { return JSON.parse(localStorage.getItem(FB_CFG_KEY))||null; } catch(e){ return null; }
-}
-function setFirebaseConfig(cfg){
-  localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg));
-}
-
-function initFirebase(){
-  const cfg = getFirebaseConfig();
-  if(!cfg || !cfg.databaseURL) return false;
-  try {
-    if(firebase.apps.length === 0){
-      firebase.initializeApp(cfg);
-    }
-    db = firebase.database();
-    setupFirebaseListeners();
-    return true;
-  } catch(e){ console.warn('Firebase init error:', e); db=null; return false; }
-}
-
-function setupFirebaseListeners(){
-  if(!db) return;
-  // Real-time sync: when data changes in Firebase — update local and re-render
-  db.ref('meters').on('value', snap=>{
-    const data = snap.val();
-    if(data){
-      METERS = Array.isArray(data) ? data : Object.values(data);
-      localStorage.setItem(METERS_KEY, JSON.stringify(METERS));
-      if(document.getElementById('page-electric')?.classList.contains('active')) renderElectric();
-      if(document.getElementById('page-water')?.classList.contains('active')) renderWater();
-      if(document.getElementById('page-meters')?.classList.contains('active')) renderMeters();
-    }
-  });
-  db.ref('readings').on('value', snap=>{
-    const data = snap.val();
-    if(data){
-      READINGS = Array.isArray(data) ? data : Object.values(data);
-      // Update ridCounter
-      const maxId = Math.max(0, ...READINGS.map(r=>r.id||0));
-      if(maxId >= ridCounter) ridCounter = maxId+1;
-      localStorage.setItem(READINGS_KEY, JSON.stringify(READINGS));
-      localStorage.setItem(COUNTER_KEY, String(ridCounter));
-      if(document.getElementById('page-electric')?.classList.contains('active')) renderElectric();
-      if(document.getElementById('page-water')?.classList.contains('active')) renderWater();
-      renderDashboard();
-    }
-  });
-  db.ref('tariffs').on('value', snap=>{
-    const data = snap.val();
-    if(data){ Object.assign(TARIFFS, data); localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS)); }
-  });
-}
 
 function saveMeters(){
   localStorage.setItem(METERS_KEY, JSON.stringify(METERS));
-  if(db) db.ref('meters').set(METERS).catch(e=>console.warn('FB meters save error',e));
   pushAllDataToSheets();
 }
 
 function saveReadings(){
   localStorage.setItem(READINGS_KEY, JSON.stringify(READINGS));
   localStorage.setItem(COUNTER_KEY, String(ridCounter));
-  if(db) db.ref('readings').set(READINGS).catch(e=>console.warn('FB readings save error',e));
   pushAllDataToSheets();
 }
 
 function saveTariffs(){
   localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS));
-  if(db) db.ref('tariffs').set(TARIFFS).catch(e=>console.warn('FB tariffs save error',e));
   pushAllDataToSheets();
 }
 
@@ -956,9 +888,6 @@ let TARIFFS = loadTariffs() || { electric:4.32, vat:0.2, loss:0.13, water:30.0, 
 if(TARIFFS.loss===undefined) TARIFFS.loss=0.13;
 if(TARIFFS.water===undefined) TARIFFS.water=30.0;
 if(TARIFFS.waterVat===undefined) TARIFFS.waterVat=0.2;
-
-// Try init Firebase on load
-window.addEventListener('DOMContentLoaded', ()=>{ initFirebase(); });
 
 // ===== GOOGLE SHEETS SYNC =====
 const SHEETS_KEY = 'energo_sheets_url_v1';
@@ -1242,14 +1171,6 @@ function initApp(){
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('uk-UA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const duc=document.getElementById('drawer-user-card');
   if(duc) duc.innerHTML=`<div style="width:32px;height:32px;border-radius:50%;background:${r.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${r.avatar}</div><div><div style="font-size:12px;font-weight:600">${currentUser.name}</div><div style="font-size:10px;color:var(--text3)">${r.label}</div></div>`;
-  // Firebase status button for admin
-  const fbBtnWrap = document.getElementById('firebase-status-btn');
-  if(fbBtnWrap){
-    if(can('edit_tariff')){
-      fbBtnWrap.style.display='block';
-      updateFirebaseStatusBtn();
-    } else { fbBtnWrap.style.display='none'; }
-  }
   // Google Sheets sync button for admin
   const sheetsSyncBtn = document.getElementById('sheets-sync-btn');
   if(sheetsSyncBtn){
@@ -2773,92 +2694,6 @@ function saveWaterTariff(){
 }
 
 // ===== FIREBASE MODAL =====
-function updateFirebaseStatusBtn(){
-  const btn = document.getElementById('fb-btn');
-  const lbl = document.getElementById('fb-btn-label');
-  if(!btn||!lbl) return;
-  if(db){
-    btn.style.background='var(--green-bg)'; btn.style.color='var(--green)'; btn.style.borderColor='var(--green2)';
-    lbl.textContent='🟢 Синхронізація: увімкнена';
-  } else if(getFirebaseConfig()){
-    btn.style.background='var(--yellow-bg)'; btn.style.color='var(--yellow)'; btn.style.borderColor='rgba(210,153,34,.4)';
-    lbl.textContent='🟡 Синхронізація: помилка';
-  } else {
-    btn.style.background='var(--bg3)'; btn.style.color='var(--text2)'; btn.style.borderColor='var(--border)';
-    lbl.textContent='🔴 Синхронізація: вимкнена';
-  }
-}
-
-function openFirebaseModal(){
-  const cfg = getFirebaseConfig()||{};
-  document.getElementById('modal-title').textContent = '🔥 Синхронізація між пристроями';
-  const body = document.getElementById('modal-body');
-  body.innerHTML='';
-
-  // Status
-  const statusEl = document.createElement('div');
-  statusEl.style.cssText = `background:${db?'var(--green-bg)':'var(--red-bg)'};border:1px solid ${db?'var(--green2)':'var(--red2)'};border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:13px;color:${db?'var(--green)':'var(--red)'};font-weight:600`;
-  statusEl.textContent = db ? '✅ Firebase підключено — дані синхронізуються на всіх пристроях в реальному часі!' : '❌ Firebase не підключено — дані зберігаються тільки в цьому браузері';
-  body.appendChild(statusEl);
-
-  // Info
-  const info = document.createElement('div');
-  info.style.cssText = 'background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8';
-  info.innerHTML = '<strong style="color:var(--text)">📋 Як налаштувати Firebase (безкоштовно):</strong><br>'+
-    '1. Відкрийте <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a><br>'+
-    '2. Натисніть <strong>"Додати проєкт"</strong> → назва: ЕнергоОблік → Створити<br>'+
-    '3. Зліва натисніть <strong>Realtime Database</strong> → Створити базу даних → Тестовий режим → OK<br>'+
-    '4. Натисніть ⚙️ → <strong>Налаштування проєкту</strong> → прокрутіть вниз → Ваші програми → &lt;/&gt; (Веб)<br>'+
-    '5. Зареєструйте програму → скопіюйте <strong>firebaseConfig</strong><br>'+
-    '6. Вставте дані нижче та натисніть Зберегти';
-  body.appendChild(info);
-
-  // Fields
-  const fields = [
-    {id:'fb-apiKey',      label:'apiKey',         val:cfg.apiKey||'',         ph:'AIzaSy...'},
-    {id:'fb-authDomain',  label:'authDomain',      val:cfg.authDomain||'',     ph:'your-app.firebaseapp.com'},
-    {id:'fb-dbUrl',       label:'databaseURL',     val:cfg.databaseURL||'',    ph:'https://your-app-default-rtdb.firebaseio.com'},
-    {id:'fb-projectId',   label:'projectId',       val:cfg.projectId||'',      ph:'your-app-12345'},
-  ];
-  const grid = document.createElement('div');
-  grid.style.cssText='display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:16px';
-  fields.forEach(f=>{
-    const d=document.createElement('div');
-    d.innerHTML=`<label class="form-label">${f.label}</label><input class="form-input" id="${f.id}" value="${f.val}" placeholder="${f.ph}" style="font-size:12px;font-family:monospace">`;
-    grid.appendChild(d);
-  });
-  body.appendChild(grid);
-
-  // Footer
-  const footer = document.createElement('div');
-  footer.className='modal-footer';
-  if(db||cfg.apiKey){
-    const discBtn=document.createElement('button');
-    discBtn.className='btn btn-danger'; discBtn.textContent='🗑 Відключити';
-    discBtn.onclick=()=>{ if(!confirm('Відключити синхронізацію?')) return; localStorage.removeItem(FB_CFG_KEY); db=null; closeModal(); updateFirebaseStatusBtn(); showNotif('Синхронізацію відключено. Перезавантажте сторінку.','error'); };
-    footer.appendChild(discBtn);
-  }
-  const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Скасувати'; cancel.onclick=closeModal;
-  const save=document.createElement('button'); save.className='btn btn-accent'; save.textContent='🔥 Підключити та синхронізувати'; save.onclick=saveFirebaseConfig;
-  footer.appendChild(cancel); footer.appendChild(save);
-  body.appendChild(footer);
-  showModal();
-}
-
-function saveFirebaseConfig(){
-  const apiKey    = document.getElementById('fb-apiKey').value.trim();
-  const authDomain= document.getElementById('fb-authDomain').value.trim();
-  const databaseURL=document.getElementById('fb-dbUrl').value.trim();
-  const projectId = document.getElementById('fb-projectId').value.trim();
-  if(!apiKey||!databaseURL){ showNotif('Заповніть apiKey та databaseURL','error'); return; }
-  const cfg = { apiKey, authDomain, databaseURL, projectId };
-  setFirebaseConfig(cfg);
-  closeModal();
-  showNotif('Firebase налаштовано! Підключаємось...','success');
-  // Reload to reinit Firebase cleanly
-  setTimeout(()=>location.reload(), 1000);
-}
-
 function openSheetsModal(){
   const current = getSheetsUrl();
   document.getElementById('modal-title').textContent = '📊 Підключення Google Sheets';
