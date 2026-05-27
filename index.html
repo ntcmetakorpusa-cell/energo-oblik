@@ -907,10 +907,9 @@ async function syncToSheets(payload){
   const url = getSheetsUrl();
   if(!url) return;
   try {
-    // Also save full snapshot for cross-device sync
     await fetch(url, {
       method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'text/plain'}, // text/plain works with no-cors!
       body: JSON.stringify(payload)
     });
   } catch(e){ console.warn('Sheets write error:', e); }
@@ -920,16 +919,17 @@ async function pushAllDataToSheets(){
   const url = getSheetsUrl();
   if(!url) return false;
   try {
+    const body = JSON.stringify({
+      action:'saveAll',
+      meters:   METERS,
+      readings: READINGS,
+      counter:  ridCounter,
+      tariffs:  TARIFFS
+    });
     await fetch(url, {
       method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        action:'saveAll',
-        meters:   METERS,
-        readings: READINGS,
-        counter:  ridCounter,
-        tariffs:  TARIFFS
-      })
+      headers:{'Content-Type':'text/plain'}, // ВАЖЛИВО: text/plain для no-cors!
+      body: body
     });
     localStorage.setItem('energo_last_push', Date.now().toString());
     return true;
