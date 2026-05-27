@@ -902,102 +902,104 @@ function setSheetsUrl(url){ localStorage.setItem(SHEETS_KEY, url); }
 
 let _syncInProgress = false;
 
-// === WRITE to Sheets: save everything ===
-async function syncToSheets(payload){
-  const url = getSheetsUrl();
-  if(!url) return;
-  try {
-    await fetch(url, {
-      method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'text/plain'}, // text/plain works with no-cors!
-      body: JSON.stringify(payload)
-    });
-  } catch(e){ console.warn('Sheets write error:', e); }
-}
-
-async function pushAllDataToSheets(){
+// ═══════════════════════════════════════════════════
+// PUSH: відправити дані на Google Sheets
+// Використовує text/plain (простий запит, без preflight)
+// без no-cors — щоб тіло не губилось при редиректі
+// ═══════════════════════════════════════════════════
+async function pushToSheets(payload){
   const url = getSheetsUrl();
   if(!url) return false;
   try {
-    const body = JSON.stringify({
-      action:'saveAll',
-      meters:   METERS,
-      readings: READINGS,
-      counter:  ridCounter,
-      tariffs:  TARIFFS
-    });
+    // text/plain = simple request = немає preflight CORS
+    // без mode:'no-cors' = тіло не губиться при 302 redirect
     await fetch(url, {
-      method:'POST', mode:'no-cors',
-      headers:{'Content-Type':'text/plain'}, // ВАЖЛИВО: text/plain для no-cors!
-      body: body
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
     });
-    localStorage.setItem('energo_last_push', Date.now().toString());
     return true;
-  } catch(e){ console.warn('Sheets pushAll error:', e); return false; }
+  } catch(e){
+    // Якщо CORS заблокував — fallback з no-cors
+    try {
+      await fetch(url, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+      return true;
+    } catch(e2){ console.warn('Push error:', e2); return false; }
+  }
 }
 
-// === READ from Sheets using JSONP (bypasses CORS) ===
+async function syncToSheets(payload){
+  if(!getSheetsUrl()) return;
+  await pushToSheets(payload);
+}
+
+async function pushAllDataToSheets(){
+  const ok = await pushToSheets({
+    action:   'saveAll',
+    meters:   METERS,
+    readings: READINGS,
+    counter:  ridCounter,
+    tariffs:  TARIFFS
+  });
+  if(ok) localStorage.setItem('energo_last_push', Date.now().toString());
+  return ok;
+}
+
+// Push all local data (explicit button)
+async function forcePushToSheets(){
+  showNotif('📤 Відправляємо дані в Google Sheets...', 'success');
+  await pushAllDataToSheets();
+  showNotif('✅ Відправлено! На іншому пристрої натисніть 📥 "Отримати"', 'success');
+}
+
+// ═══════════════════════════════════════════════════
+// PULL: завантажити дані з Google Sheets через JSONP
+// ═══════════════════════════════════════════════════
 async function pullDataFromSheets(showStatus){
   const url = getSheetsUrl();
   if(!url){ if(showStatus) showNotif('Google Sheets не підключено','error'); return false; }
   if(_syncInProgress) return false;
   _syncInProgress = true;
-  if(showStatus) showNotif('⏳ Завантаження даних...','success');
+  if(showStatus) showNotif('⏳ Завантаження...', 'success');
 
-  return new Promise((resolve)=>{
-    const cbName = '_sheetsCb_' + Date.now();
-    const script = document.createElement('script');
-    const timeout = setTimeout(()=>{
-      cleanup();
-      _syncInProgress = false;
-      // Fallback: try plain fetch
-      fetchFallback(showStatus).then(resolve);
-    }, 8000);
-
-    function cleanup(){
-      clearTimeout(timeout);
-      delete window[cbName];
-      if(script.parentNode) script.parentNode.removeChild(script);
-    }
-
-    window[cbName] = function(data){
-      cleanup();
-      _syncInProgress = false;
-      applySheetData(data, showStatus);
-      resolve(true);
-    };
-
-    script.src = url + '?action=getData&callback=' + cbName + '&t=' + Date.now();
-    script.onerror = ()=>{
-      cleanup();
-      _syncInProgress = false;
-      fetchFallback(showStatus).then(resolve);
-    };
-    document.head.appendChild(script);
+  // Спочатку пробуємо JSONP (обходить CORS)
+  const jsonpResult = await new Promise((resolve)=>{
+    const cbName = '_gc_' + Date.now();
+    const tag = document.createElement('script');
+    const timer = setTimeout(()=>{ cleanup(); resolve(null); }, 10000);
+    function cleanup(){ clearTimeout(timer); delete window[cbName]; if(tag.parentNode) tag.parentNode.removeChild(tag); }
+    window[cbName] = (data)=>{ cleanup(); resolve(data); };
+    tag.onerror = ()=>{ cleanup(); resolve(null); };
+    tag.src = url + '?action=getData&callback=' + cbName + '&t=' + Date.now();
+    document.head.appendChild(tag);
   });
-}
 
-// Fallback: regular fetch (works on some configs)
-async function fetchFallback(showStatus){
-  const url = getSheetsUrl();
-  try {
-    const res = await fetch(url + '?action=getData&t=' + Date.now(), {
-      credentials: 'omit'
-    });
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    applySheetData(data, showStatus);
-    return true;
-  } catch(e){
-    console.warn('Fallback fetch error:', e);
-    if(showStatus) showNotif('❌ Не вдалось завантажити дані. Спробуйте ще раз.','error');
-    return false;
+  // Якщо JSONP не спрацював — пробуємо fetch
+  let data = jsonpResult;
+  if(!data){
+    try {
+      const res = await fetch(url + '?action=getData&t=' + Date.now());
+      data = await res.json();
+    } catch(e){
+      console.warn('Pull fetch error:', e);
+    }
   }
+
+  _syncInProgress = false;
+  applySheetData(data, showStatus);
+  return !!data;
 }
 
 function applySheetData(data, showStatus){
-  if(!data){ if(showStatus) showNotif('❌ Немає відповіді від Google Sheets','error'); return; }
-  if(data.status==='error'){ if(showStatus) showNotif('❌ Помилка: '+data.message,'error'); return; }
+  if(!data || data.status==='error'){
+    if(showStatus) showNotif('❌ Sheets недоступний. Перевірте URL та Apps Script.', 'error');
+    safeRender();
+    return;
+  }
 
   let changed = false;
   if(data.meters && Array.isArray(data.meters) && data.meters.length > 0){
@@ -1012,50 +1014,36 @@ function applySheetData(data, showStatus){
     localStorage.setItem(COUNTER_KEY, String(ridCounter));
     changed = true;
   }
-  if(data.tariffs && Object.keys(data.tariffs).length > 0){
+  if(data.tariffs && typeof data.tariffs === 'object'){
     Object.assign(TARIFFS, data.tariffs);
     localStorage.setItem(TARIFFS_KEY, JSON.stringify(TARIFFS));
   }
 
-  // Always re-render to fix blank page
-  try {
-    const ap = document.querySelector('.page.active')?.id;
-    if(ap==='page-electric') renderElectric();
-    else if(ap==='page-water') renderWater();
-    else if(ap==='page-reports') renderReports();
-    else if(ap==='page-meters') renderMeters();
-    else navigateTo('dashboard'); // fallback: go to dashboard
-    renderDashboard();
-  } catch(e){ console.warn('Render error after sync:', e); navigateTo('dashboard'); }
+  safeRender();
 
   if(showStatus){
-    if(changed){
-      showNotif('✅ Дані завантажено з Google Sheets!', 'success');
-    } else {
-      showNotif('⚠️ Sheets порожній! На головному пристрої натисніть 📤 "Відправити"', 'error');
-    }
+    showNotif(
+      changed
+        ? '✅ Дані завантажено з Google Sheets!'
+        : '⚠️ Google Sheets порожній. На головному пристрої натисніть 📤',
+      changed ? 'success' : 'error'
+    );
   }
 }
 
-// Push all local data to Sheets (explicit button)
-async function forcePushToSheets(){
-  showNotif('📤 Відправляємо всі дані в Google Sheets...','success');
-  const ok = await pushAllDataToSheets();
-  // pushAllDataToSheets uses no-cors so always returns true
-  showNotif('✅ Дані відправлено! На іншому пристрої натисніть 📥 "Отримати"','success');
-}
-
-// On start: push if has data, pull if empty
-function autoSyncOnStart(){
-  if(!getSheetsUrl()) return;
-  const hasLocalData = READINGS.filter(r=>!r.isPrefill).length > 0;
-  setTimeout(async ()=>{
-    if(hasLocalData){
-      await pushAllDataToSheets();
-    } else {
-      await pullDataFromSheets(true);
-    }
-  }, 1200);
+function safeRender(){
+  try {
+    const ap = document.querySelector('.page.active')?.id;
+    if(ap === 'page-electric') renderElectric();
+    else if(ap === 'page-water') renderWater();
+    else if(ap === 'page-reports') renderReports();
+    else if(ap === 'page-meters') renderMeters();
+    else navigateTo('dashboard');
+    renderDashboard();
+  } catch(e){
+    console.warn('Render error:', e);
+    try { navigateTo('dashboard'); } catch(e2){}
+  }
 }
 
 let currentUser = null;
