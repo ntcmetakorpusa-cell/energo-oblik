@@ -1466,8 +1466,10 @@ function renderElectric(){
   const rows = elMeters.map(meter=>{
     const r=getReading(meter.id,m,y);
     const p=getPrevReading(meter.id,m,y);
-    const prev=r?.previous||(p?.current||0);
-    const diff=r?(r.current-prev):null;
+    const pf=getPrefill(meter.id,m,y);
+    // prev: реальне попереднє у поточному записі → реальне показання мин. місяця → prefill
+    const prev = r?.previous ?? (p?.current ?? (pf?.previous ?? null));
+    const diff=(r && prev!=null)?(r.current-prev):null;
     if(diff!==null) totalDiff+=diff;
     const loss=diff!==null?+(diff*LOSS_RATE).toFixed(2):0;
     if(diff!==null) totalLoss+=loss;
@@ -1482,8 +1484,8 @@ function renderElectric(){
     const meterStatusChip = meter.status==='reserve'?` <span class="badge badge-yellow" style="font-size:10px">⏸резерв</span>`:meter.status==='inactive'?` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>`:'';
     const status = r
       ? `<span class="badge badge-green">✓ Введено</span>`
-      : getPrefill(meter.id,m,y)
-      ? `<span class="badge badge-yellow" title="Попереднє автозаповнено після 22-го">⏳ Авто-попереднє</span>`
+      : prev!=null
+      ? `<span class="badge badge-yellow" title="Попереднє показання вже відоме">⏳ Готово до введення</span>`
       : `<span class="badge badge-red">Не введено</span>`;
 
     const finCols = can('edit_tariff')
@@ -1498,7 +1500,7 @@ function renderElectric(){
       <td><span class="badge badge-blue">${meter.number}</span>${meterStatusChip}</td>
       <td>${meter.room}</td>
       <td class="td-num">${r?r.current.toLocaleString():'—'}</td>
-      <td class="td-num">${r?prev.toLocaleString():'—'}</td>
+      <td class="td-num">${prev!=null?prev.toLocaleString():'—'}</td>
       <td>${diffCell}</td>
       ${finCols}
       <td>${status}</td>
@@ -1530,20 +1532,21 @@ function renderElectric(){
       ${elMeters.map(meter=>{
         const r=getReading(meter.id,m,y);
         const p=getPrevReading(meter.id,m,y);
-        const prev=r?.previous||(p?.current||0);
-        const diff=r?(r.current-prev):null;
+        const pf=getPrefill(meter.id,m,y);
+        const prev = r?.previous ?? (p?.current ?? (pf?.previous ?? null));
+        const diff=(r && prev!=null)?(r.current-prev):null;
         const loss=diff!==null?+(diff*TARIFFS.loss).toFixed(2):0;
         const cost=diff!==null?(diff+loss)*TARIFFS.electric:0;
         const total=cost*(1+TARIFFS.vat);
         const statusChip=meter.status==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:meter.status==='inactive'?`<span class="badge badge-red">🔴 Вимкнено</span>`:'';
-        const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
+        const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:prev!=null?`<span class="badge badge-yellow">⏳ Готово</span>`:`<span class="badge badge-red">Не введено</span>`;
         return `<div class="m-card">
           <div class="m-card-header">
             <div class="m-card-title"><span class="badge badge-blue">${meter.number}</span>${statusChip}${readingBadge}</div>
           </div>
           <div style="font-size:12px;color:var(--text2);margin-bottom:8px">📍 ${meter.room}</div>
           <div class="m-card-row"><span class="m-card-label">Поточне</span><span class="m-card-value">${r?r.current.toLocaleString():'—'}</span></div>
-          <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${r?prev.toLocaleString():'—'}</span></div>
+          <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${prev!=null?prev.toLocaleString():'—'}</span></div>
           <div class="m-card-row"><span class="m-card-label">Різниця</span><span class="m-card-value" style="color:var(--green)">${diff!==null?'+'+diff:'—'}</span></div>
           ${diff!==null?`<div class="m-card-row"><span class="m-card-label">Втрати 13%</span><span class="m-card-value" style="color:var(--yellow)">+${loss}</span></div>`:''}
           ${can('edit_tariff')&&diff!==null?`
@@ -1576,9 +1579,10 @@ function renderWater(){
   const rows = wtMeters.map(meter=>{
     const r=getReading(meter.id,m,y);
     const p=getPrevReading(meter.id,m,y);
-    const prev=r?.previous||(p?.current||0);
+    const pf=getPrefill(meter.id,m,y);
+    const prev = r?.previous ?? (p?.current ?? (pf?.previous ?? null));
     // Fix float precision
-    const diff = r ? +((r.current - prev).toFixed(4)) : null;
+    const diff = (r && prev!=null) ? +((r.current - prev).toFixed(4)) : null;
     const diffRound = diff !== null ? +diff.toFixed(2) : null;
     if(diffRound!==null) totalDiff = +(totalDiff + diffRound).toFixed(2);
 
@@ -1596,8 +1600,8 @@ function renderWater(){
       ? ` <span class="badge badge-red" style="font-size:10px">🔴вимкнено</span>` : '';
     const status = r
       ? `<span class="badge badge-green">✓ Введено</span>`
-      : getPrefill(meter.id,m,y)
-      ? `<span class="badge badge-yellow" title="Попереднє автозаповнено після 22-го">⏳ Авто-попереднє</span>`
+      : prev!=null
+      ? `<span class="badge badge-yellow" title="Попереднє показання вже відоме">⏳ Готово до введення</span>`
       : `<span class="badge badge-red">Не введено</span>`;
     const actions = can('add_reading')
       ? `<div class="actions-cell"><button class="btn btn-sm btn-accent" onclick="openAddReadingModal('water',${meter.id})">${r?'✏️ Змінити':'+ Ввести'}</button>${can('delete_reading')&&r?`<button class="btn btn-sm btn-danger" onclick="deleteReading(${meter.id},${m},${y})">🗑</button>`:''}</div>`
@@ -1611,7 +1615,7 @@ function renderWater(){
       <td><span class="badge badge-teal">${meter.number}</span>${meterChip}</td>
       <td>${meter.room}</td>
       <td class="td-num">${r?r.current.toLocaleString():'—'}</td>
-      <td class="td-num">${r?prev.toLocaleString():'—'}</td>
+      <td class="td-num">${prev!=null?prev.toLocaleString():'—'}</td>
       <td>${diffCell}</td>
       ${finCols}
       <td>${r?`<span style="color:var(--text2);font-size:12px">${r.note||'—'}</span>`:'—'}</td>
@@ -1650,20 +1654,21 @@ function renderWater(){
       ${wtMeters.map(meter=>{
         const r=getReading(meter.id,m,y);
         const p=getPrevReading(meter.id,m,y);
-        const prev=r?.previous||(p?.current||0);
-        const diff=r ? +((r.current-prev).toFixed(2)) : null;
+        const pf=getPrefill(meter.id,m,y);
+        const prev = r?.previous ?? (p?.current ?? (pf?.previous ?? null));
+        const diff=(r && prev!=null) ? +((r.current-prev).toFixed(2)) : null;
         const cost=diff!==null?+(diff*TARIFFS.water).toFixed(2):0;
         const vat2=+(cost*TARIFFS.waterVat).toFixed(2);
         const total2=+(cost+vat2).toFixed(2);
         const statusChip=meter.status==='reserve'?`<span class="badge badge-yellow">⏸ Резерв</span>`:meter.status==='inactive'?`<span class="badge badge-red">🔴 Вимкнено</span>`:'';
-        const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:`<span class="badge badge-red">Не введено</span>`;
+        const readingBadge=r?`<span class="badge badge-green">✓ Введено</span>`:prev!=null?`<span class="badge badge-yellow">⏳ Готово</span>`:`<span class="badge badge-red">Не введено</span>`;
         return `<div class="m-card">
           <div class="m-card-header">
             <div class="m-card-title"><span class="badge badge-teal">${meter.number}</span>${statusChip}${readingBadge}</div>
           </div>
           <div style="font-size:12px;color:var(--text2);margin-bottom:8px">📍 ${meter.room}</div>
           <div class="m-card-row"><span class="m-card-label">Поточне</span><span class="m-card-value">${r?r.current.toLocaleString():'—'}</span></div>
-          <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${r?prev.toLocaleString():'—'}</span></div>
+          <div class="m-card-row"><span class="m-card-label">Попереднє</span><span class="m-card-value">${prev!=null?prev.toLocaleString():'—'}</span></div>
           <div class="m-card-row"><span class="m-card-label">Різниця, м³</span><span class="m-card-value" style="color:var(--teal)">${diff!==null?'+'+diff:'—'}</span></div>
           ${showFin&&diff!==null?`
           <div class="m-card-row"><span class="m-card-label">Вартість без ПДВ</span><span class="m-card-value">${cost} грн</span></div>
